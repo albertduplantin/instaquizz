@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { User, onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged } from 'firebase/auth'
+import type { User } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { signIn, signUp, signOutUser } from '../lib/firebaseServices'
 

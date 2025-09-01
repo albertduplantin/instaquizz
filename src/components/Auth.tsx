@@ -13,7 +13,7 @@ export function Auth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const { signIn, signUp } = useAuth()
+  const { login, register } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,11 +22,9 @@ export function Auth() {
 
     try {
       if (isLogin) {
-        const { error } = await signIn(formData.email, formData.password)
-        if (error) throw error
+        await login(formData.email, formData.password)
       } else {
-        const { error } = await signUp(formData.email, formData.password, formData.name)
-        if (error) throw error
+        await register(formData.email, formData.password, formData.name)
         alert('Vérifiez votre email pour confirmer votre inscription!')
       }
     } catch (error: any) {

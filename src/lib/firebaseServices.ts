@@ -1,8 +1,7 @@
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
-  signOut,
-  User
+  signOut
 } from 'firebase/auth'
 import { 
   collection, 
@@ -10,9 +9,6 @@ import {
   getDocs, 
   query, 
   where, 
-  doc, 
-  updateDoc,
-  deleteDoc,
   orderBy,
   limit
 } from 'firebase/firestore'
@@ -116,7 +112,7 @@ export const getClasses = async (teacherId: string) => {
       orderBy('created_at', 'desc')
     )
     const querySnapshot = await getDocs(q)
-    const classes = querySnapshot.docs.map(doc => ({
+    const classes = querySnapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     })) as Class[]
@@ -148,7 +144,7 @@ export const getStudents = async (classId: string) => {
       orderBy('created_at', 'desc')
     )
     const querySnapshot = await getDocs(q)
-    const students = querySnapshot.docs.map(doc => ({
+    const students = querySnapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     })) as Student[]
@@ -181,7 +177,7 @@ export const getQuestions = async (classId: string) => {
       orderBy('created_at', 'desc')
     )
     const querySnapshot = await getDocs(q)
-    const questions = querySnapshot.docs.map(doc => ({
+    const questions = querySnapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     })) as Question[]
@@ -216,7 +212,7 @@ export const getQuizResults = async (classId: string, limitCount: number = 50) =
       limit(limitCount)
     )
     const querySnapshot = await getDocs(q)
-    const results = querySnapshot.docs.map(doc => ({
+    const results = querySnapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     })) as QuizResult[]
