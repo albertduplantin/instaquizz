@@ -1,60 +1,49 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
-import type { User } from '@supabase/supabase-js'
+import { User, onAuthStateChanged } from 'firebase/auth'
+import { auth } from '../lib/firebase'
+import { signIn, signUp, signOutUser } from '../lib/firebaseServices'
 
-export function useAuth() {
+export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Vérifier l'utilisateur connecté au chargement
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
       setUser(user)
       setLoading(false)
     })
 
-    // Écouter les changements d'authentification
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_, session) => {
-        setUser(session?.user ?? null)
-        setLoading(false)
-      }
-    )
-
-    return () => subscription.unsubscribe()
+    return () => unsubscribe()
   }, [])
 
-  const signUp = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
-        },
-      },
-    })
-    return { data, error }
+  const login = async (email: string, password: string) => {
+    const { user, error } = await signIn(email, password)
+    if (error) {
+      throw error
+    }
+    return user
   }
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    return { data, error }
+  const register = async (email: string, password: string, name: string) => {
+    const { user, error } = await signUp(email, password, name)
+    if (error) {
+      throw error
+    }
+    return user
   }
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    return { error }
+  const logout = async () => {
+    const { error } = await signOutUser()
+    if (error) {
+      throw error
+    }
   }
 
   return {
     user,
     loading,
-    signUp,
-    signIn,
-    signOut,
+    login,
+    register,
+    logout
   }
 } 
