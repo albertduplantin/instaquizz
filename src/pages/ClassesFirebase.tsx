@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Users, Trash2, UserPlus, Edit2, Upload, FileText } from 'lucide-react'
+import { Plus, Users, Trash2, UserPlus, Edit2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { createClass, getClasses, createStudent, getStudents } from '../lib/firebaseServices'
 import type { Class, Student } from '../types'
@@ -11,15 +11,8 @@ export function ClassesFirebase() {
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
   const [showAddClass, setShowAddClass] = useState(false)
   const [showAddStudent, setShowAddStudent] = useState(false)
-  const [showImportStudents, setShowImportStudents] = useState(false)
-  const [editingClass, setEditingClass] = useState<Class | null>(null)
-  const [editingStudent, setEditingStudent] = useState<Student | null>(null)
   const [newClassName, setNewClassName] = useState('')
   const [newStudentName, setNewStudentName] = useState('')
-  const [editClassName, setEditClassName] = useState('')
-  const [editStudentName, setEditStudentName] = useState('')
-  const [importStudentsText, setImportStudentsText] = useState('')
-  const [importMethod, setImportMethod] = useState<'text' | 'file'>('text')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -38,7 +31,7 @@ export function ClassesFirebase() {
     if (!user) return
 
     try {
-      const { classes: classesData, error } = await getClasses(user.uid)
+      const { classes: classesData, error } = await getClasses(user.id)
       if (error) {
         console.error('Erreur:', error)
       } else {
@@ -68,14 +61,14 @@ export function ClassesFirebase() {
 
     setLoading(true)
     try {
-      const { id, error } = await createClass(newClassName, user.uid)
+      const { id, error } = await createClass(newClassName, user.id)
       if (error) {
         console.error('Erreur:', error)
       } else {
         const newClass: Class = {
           id: id!,
           name: newClassName,
-          teacher_id: user.uid,
+          teacher_id: user.id,
           created_at: new Date().toISOString()
         }
         setClasses([...classes, newClass])
@@ -146,8 +139,7 @@ export function ClassesFirebase() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    setEditingClass(classItem)
-                    setEditClassName(classItem.name)
+                    // TODO: Implémenter la modification avec Firebase
                   }}
                   className="text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors"
                   title="Modifier la classe"
@@ -241,8 +233,7 @@ export function ClassesFirebase() {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => {
-                        setEditingStudent(student)
-                        setEditStudentName(student.name)
+                        // TODO: Implémenter la modification avec Firebase
                       }}
                       className="text-blue-600 hover:bg-blue-100 p-2 rounded-lg transition-colors"
                       title="Modifier l'élève"

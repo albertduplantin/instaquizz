@@ -23,6 +23,8 @@ export interface Question {
   class_id: string
   teacher_id: string
   created_at: string
+  image_url?: string
+  image_alt?: string
 }
 
 export interface QuizResult {

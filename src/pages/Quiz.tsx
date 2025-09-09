@@ -337,12 +337,23 @@ export function Quiz() {
                       {questions.slice(0, 5).map((question) => (
                         <div key={question.id} className="flex items-start space-x-2">
                           <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                          <span className="text-sm text-gray-700 line-clamp-2">
-                            {question.content.length > 60 
-                              ? `${question.content.substring(0, 60)}...` 
-                              : question.content
-                            }
-                          </span>
+                          <div className="flex-1 min-w-0">
+                            {question.image_url && (
+                              <div className="mb-1">
+                                <img
+                                  src={question.image_url}
+                                  alt={question.image_alt || 'Image'}
+                                  className="w-8 h-8 object-cover rounded border border-gray-200"
+                                />
+                              </div>
+                            )}
+                            <span className="text-sm text-gray-700 line-clamp-2">
+                              {question.content.length > 60 
+                                ? `${question.content.substring(0, 60)}...` 
+                                : question.content
+                              }
+                            </span>
+                          </div>
                         </div>
                       ))}
                       {questions.length > 5 && (
@@ -502,8 +513,21 @@ export function Quiz() {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">❓ Question</h3>
               {currentQuestion ? (
                 <div className="space-y-4">
-                  <div className="text-left text-gray-800 bg-white rounded-lg p-6 border min-h-[120px] flex items-center">
-                    <span className="leading-relaxed text-lg w-full">{currentQuestion.content}</span>
+                  <div className="text-left text-gray-800 bg-white rounded-lg p-6 border min-h-[120px]">
+                    <div className="space-y-4">
+                      {currentQuestion.image_url && (
+                        <div className="flex justify-center">
+                          <img
+                            src={currentQuestion.image_url}
+                            alt={currentQuestion.image_alt || 'Image de la question'}
+                            className="max-w-full max-h-64 object-contain rounded-lg border border-gray-200 shadow-sm"
+                          />
+                        </div>
+                      )}
+                      <div className="flex items-center">
+                        <span className="leading-relaxed text-lg w-full">{currentQuestion.content}</span>
+                      </div>
+                    </div>
                   </div>
                   <button
                     onClick={pickNewQuestion}

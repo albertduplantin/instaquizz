@@ -48,7 +48,7 @@ function MigrationToggle({ onToggle, isFirebase }: { onToggle: () => void, isFir
 function App() {
   const { user, loading } = useAuth()
   const [currentPage, setCurrentPage] = useState('dashboard')
-  const [useFirebase, setUseFirebase] = useState(false)
+  const [useFirebase, setUseFirebase] = useState(false) // Restons sur Supabase par défaut
 
   if (loading) {
     return (

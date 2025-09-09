@@ -68,7 +68,7 @@ export function Layout({ children, currentPage, onPageChange }: LayoutProps) {
 
             <div className="flex items-center space-x-4">
               <span className="hidden sm:block text-sm text-gray-600">
-                {user?.displayName || user?.email}
+                {user?.user_metadata?.name || user?.email}
               </span>
               
               {/* Bouton Contact Albert Duplantin */}

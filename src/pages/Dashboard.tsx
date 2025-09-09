@@ -82,6 +82,16 @@ export function Dashboard({ onPageChange }: DashboardProps) {
 
   return (
     <div className="space-y-6">
+      {/* BOUTON TEST TOTO */}
+      <div className="bg-green-100 border border-green-300 rounded-lg p-4">
+        <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold">
+          TOTO
+        </button>
+        <p className="text-sm text-green-700 mt-2">
+          Si vous voyez ce bouton, les modifications sont prises en compte !
+        </p>
+      </div>
+      
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">
           Tableau de bord

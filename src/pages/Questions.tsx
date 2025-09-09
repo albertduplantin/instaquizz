@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2, Search, BookOpen, Users, Upload, FileText } from 'lucide-react'
+import { Plus, Edit2, Trash2, Search, BookOpen, Users, Upload, FileText, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { ImageUpload } from '../components/ImageUpload'
+import { DebugStorage } from '../components/DebugStorage'
 import type { Question, Class } from '../types'
 
 export function Questions() {
@@ -12,12 +14,15 @@ export function Questions() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showImportQuestions, setShowImportQuestions] = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [importQuestionsText, setImportQuestionsText] = useState('')
   const [importMethod, setImportMethod] = useState<'text' | 'file'>('text')
   const [formData, setFormData] = useState({
-    content: ''
+    content: '',
+    image_url: '',
+    image_alt: ''
   })
 
   useEffect(() => {
@@ -33,6 +38,23 @@ export function Questions() {
       setQuestions([])
     }
   }, [selectedClass])
+
+  // Fermer le menu d'export quand on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showExportMenu) {
+        const target = event.target as HTMLElement
+        if (!target.closest('.export-menu-container')) {
+          setShowExportMenu(false)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showExportMenu])
 
   const fetchClasses = async () => {
     try {
@@ -80,6 +102,8 @@ export function Questions() {
           .from('questions')
           .update({
             content: formData.content,
+            image_url: formData.image_url || null,
+            image_alt: formData.image_alt || null,
           })
           .eq('id', editingQuestion.id)
 
@@ -92,13 +116,15 @@ export function Questions() {
               content: formData.content,
               class_id: selectedClass.id,
               teacher_id: user?.id,
+              image_url: formData.image_url || null,
+              image_alt: formData.image_alt || null,
             },
           ])
 
         if (error) throw error
       }
 
-      setFormData({ content: '' })
+      setFormData({ content: '', image_url: '', image_alt: '' })
       setShowForm(false)
       setEditingQuestion(null)
       fetchQuestions()
@@ -109,7 +135,11 @@ export function Questions() {
 
   const handleEdit = (question: Question) => {
     setEditingQuestion(question)
-    setFormData({ content: question.content })
+    setFormData({ 
+      content: question.content,
+      image_url: question.image_url || '',
+      image_alt: question.image_alt || ''
+    })
     setShowForm(true)
   }
 
@@ -209,6 +239,74 @@ export function Questions() {
     reader.readAsText(file)
   }
 
+  const handleImageUploaded = (imageUrl: string, imageAlt: string) => {
+    setFormData(prev => ({
+      ...prev,
+      image_url: imageUrl,
+      image_alt: imageAlt
+    }))
+  }
+
+  const handleImageRemoved = () => {
+    setFormData(prev => ({
+      ...prev,
+      image_url: '',
+      image_alt: ''
+    }))
+  }
+
+  const handleExportQuestions = (format: 'txt' | 'csv') => {
+    if (!selectedClass || questions.length === 0) {
+      alert('Aucune question à exporter pour cette classe')
+      return
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0]
+    const filename = `questions_${selectedClass.name.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}`
+
+    if (format === 'txt') {
+      // Export en format texte (une question par ligne)
+      const content = questions.map(q => {
+        let questionText = q.content
+        if (q.image_url) {
+          questionText += `\n[Image: ${q.image_url}]`
+        }
+        return questionText
+      }).join('\n\n')
+      
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${filename}.txt`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } else if (format === 'csv') {
+      // Export en format CSV avec en-têtes
+      const csvContent = [
+        'Question,Image,Date de création',
+        ...questions.map(q => {
+          const question = q.content.replace(/"/g, '""')
+          const image = q.image_url ? q.image_url : ''
+          const date = new Date(q.created_at).toLocaleDateString('fr-FR')
+          return `"${question}","${image}","${date}"`
+        })
+      ].join('\n')
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${filename}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    }
+  }
+
   const filteredQuestions = questions.filter((question) =>
     question.content.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -227,6 +325,9 @@ export function Questions() {
   if (!selectedClass) {
     return (
       <div className="space-y-6">
+        {/* Debug Storage */}
+        <DebugStorage />
+        
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center gap-3 mb-6">
             <BookOpen className="h-6 w-6 text-blue-600" />
@@ -270,6 +371,9 @@ export function Questions() {
 
   return (
     <div className="space-y-6">
+      {/* Debug Storage */}
+      <DebugStorage />
+      
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -306,11 +410,49 @@ export function Questions() {
               <Upload className="h-4 w-4" />
               Import
             </button>
+            {questions.length > 0 && (
+              <div className="relative export-menu-container">
+                <button
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 min-w-[140px] justify-center"
+                >
+                  <Download className="h-4 w-4" />
+                  Export
+                </button>
+                
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          handleExportQuestions('txt')
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Export TXT
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleExportQuestions('csv')
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Export CSV
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <button
               onClick={() => {
                 setShowForm(true)
                 setEditingQuestion(null)
-                setFormData({ content: '' })
+                setFormData({ content: '', image_url: '', image_alt: '' })
               }}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 min-w-[140px] justify-center"
             >
@@ -326,7 +468,7 @@ export function Questions() {
           <h2 className="text-lg font-semibold mb-4 text-gray-900">
             {editingQuestion ? 'Modifier la question' : 'Nouvelle question'}
           </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-1">
                 Contenu de la question *
@@ -341,6 +483,21 @@ export function Questions() {
                 placeholder="Saisissez votre question..."
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Image (optionnelle)
+              </label>
+              <ImageUpload
+                onImageUploaded={handleImageUploaded}
+                onImageRemoved={handleImageRemoved}
+                currentImageUrl={formData.image_url}
+                currentImageAlt={formData.image_alt}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Ajoutez une image pour illustrer votre question (PNG, JPG, GIF jusqu'à 5MB)
+              </p>
+            </div>
             <div className="flex gap-3">
               <button
                 type="submit"
@@ -353,7 +510,7 @@ export function Questions() {
                 onClick={() => {
                   setShowForm(false)
                   setEditingQuestion(null)
-                  setFormData({ content: '' })
+                  setFormData({ content: '', image_url: '', image_alt: '' })
                 }}
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
               >
@@ -393,13 +550,24 @@ export function Questions() {
           <div className="divide-y divide-gray-200">
             {filteredQuestions.map((question) => (
               <div key={question.id} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-gray-900 leading-relaxed">{question.content}</p>
-                    <p className="text-sm text-gray-500 mt-2">
-                      Créée le {new Date(question.created_at).toLocaleDateString('fr-FR')}
-                    </p>
-                  </div>
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="space-y-3">
+                  {question.image_url && (
+                    <div className="flex justify-center">
+                      <img
+                        src={question.image_url}
+                        alt={question.image_alt || 'Image de la question'}
+                        className="max-w-full max-h-48 object-contain rounded-lg border border-gray-200 shadow-sm"
+                      />
+                    </div>
+                  )}
+                  <p className="text-gray-900 leading-relaxed">{question.content}</p>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  Créée le {new Date(question.created_at).toLocaleDateString('fr-FR')}
+                </p>
+              </div>
                   <div className="flex items-center gap-2 ml-4">
                     <button
                       onClick={() => handleEdit(question)}

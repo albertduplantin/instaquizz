@@ -1,40 +1,61 @@
 import { useState, useEffect } from 'react'
-import { onAuthStateChanged } from 'firebase/auth'
-import type { User } from 'firebase/auth'
-import { auth } from '../lib/firebase'
-import { signIn, signUp, signOutUser } from '../lib/firebaseServices'
+import { supabase } from '../lib/supabase'
+import type { User } from '@supabase/supabase-js'
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-      setUser(user)
+    // Récupérer la session actuelle
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUser(session?.user ?? null)
       setLoading(false)
-    })
+    }
 
-    return () => unsubscribe()
+    getSession()
+
+    // Écouter les changements d'authentification
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_, session) => {
+        setUser(session?.user ?? null)
+        setLoading(false)
+      }
+    )
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const login = async (email: string, password: string) => {
-    const { user, error } = await signIn(email, password)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
     if (error) {
       throw error
     }
-    return user
+    return data.user
   }
 
   const register = async (email: string, password: string, name: string) => {
-    const { user, error } = await signUp(email, password, name)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: name,
+        }
+      }
+    })
     if (error) {
       throw error
     }
-    return user
+    return data.user
   }
 
   const logout = async () => {
-    const { error } = await signOutUser()
+    const { error } = await supabase.auth.signOut()
     if (error) {
       throw error
     }
