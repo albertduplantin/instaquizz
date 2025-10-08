@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Users, Trash2, UserPlus, Edit2, Upload, FileText, AlertTriangle } from 'lucide-react'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
-import { classService, studentService } from '../lib/supabaseServices'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
+import { classService, studentService } from '../lib/firebaseServices'
 import { limitsService } from '../lib/subscriptionService'
 import type { Class, Student } from '../types'
 
@@ -10,7 +10,7 @@ interface ClassesProps {
 }
 
 export function Classes({ onPageChange }: ClassesProps) {
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
   const [classes, setClasses] = useState<Class[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
@@ -78,7 +78,7 @@ export function Classes({ onPageChange }: ClassesProps) {
     if (!user) return
 
     try {
-      const classesData = await classService.getByTeacher(user.id)
+      const classesData = await classService.getByTeacher(user.uid)
       setClasses(classesData as Class[])
     } catch (error) {
       console.error('Erreur:', error)
@@ -103,7 +103,7 @@ export function Classes({ onPageChange }: ClassesProps) {
     
     try {
       // Vérifier les limites avant de créer la classe
-      const canCreate = await limitsService.canCreateClass(user.id, classes.length)
+      const canCreate = await limitsService.canCreateClass(user.uid, classes.length)
       
       if (!canCreate.allowed) {
         handleLimitAlert(canCreate)
@@ -113,7 +113,8 @@ export function Classes({ onPageChange }: ClassesProps) {
 
       const newClass = await classService.create({
         name: newClassName,
-        teacher_id: user.id
+        teacher_id: user.uid,
+        created_at: new Date()
       })
       setClasses([...classes, newClass])
       setNewClassName('')
@@ -133,7 +134,7 @@ export function Classes({ onPageChange }: ClassesProps) {
     
     try {
       // Vérifier les limites avant d'ajouter l'étudiant
-      const canAdd = await limitsService.canAddStudent(user.id, selectedClass.id!, students.length)
+      const canAdd = await limitsService.canAddStudent(user.uid, selectedClass.id!, students.length)
       
       if (!canAdd.allowed) {
         handleLimitAlert(canAdd)
@@ -142,7 +143,8 @@ export function Classes({ onPageChange }: ClassesProps) {
 
       const newStudent = await studentService.create({
         name: newStudentName,
-        class_id: selectedClass.id!
+        class_id: selectedClass.id!,
+        created_at: new Date()
       })
       setStudents([...students, newStudent])
       setNewStudentName('')

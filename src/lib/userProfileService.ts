@@ -7,7 +7,7 @@ import {
   updateDoc
 } from 'firebase/firestore'
 import { db } from './firebase'
-import type { User } from '../types'
+import type { User } from 'firebase/auth'
 
 export interface UserProfile {
   id: string
@@ -22,24 +22,24 @@ export interface UserProfile {
 export const userProfileService = {
   // Créer ou mettre à jour un profil utilisateur
   async createOrUpdateProfile(user: User, additionalData?: Partial<UserProfile>) {
-    try {
-      const profileData: UserProfile = {
-        id: user.id,
-        email: user.email || '',
-        displayName: user.displayName || user.email?.split('@')[0] || `User_${user.id.substring(0, 8)}`,
-        photoURL: user.photoURL || undefined, // S'assurer que c'est undefined et non null
-        created_at: new Date().toISOString(),
-        last_login: new Date().toISOString(),
-        isActive: true,
-        ...additionalData
-      }
+    const profileData: UserProfile = {
+      id: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || user.email?.split('@')[0] || `User_${user.uid.substring(0, 8)}`,
+      photoURL: user.photoURL || undefined, // S'assurer que c'est undefined et non null
+      created_at: new Date().toISOString(),
+      last_login: new Date().toISOString(),
+      isActive: true,
+      ...additionalData
+    }
 
+    try {
       // Nettoyer les données pour Firestore (supprimer les champs undefined)
       const cleanProfileData = Object.fromEntries(
         Object.entries(profileData).filter(([_, value]) => value !== undefined)
       ) as UserProfile
 
-      const profileRef = doc(db, 'userProfiles', user.id)
+      const profileRef = doc(db, 'userProfiles', user.uid)
       await setDoc(profileRef, cleanProfileData, { merge: true })
       
       return profileData
@@ -49,7 +49,7 @@ export const userProfileService = {
       // Gestion spécifique des erreurs de permissions
       if (error.code === 'permission-denied') {
         console.warn('Permissions insuffisantes pour créer/mettre à jour le profil. Vérifiez les règles Firestore.')
-        return data // Retourner les données même en cas d'erreur de permissions
+        return profileData // Retourner les données même en cas d'erreur de permissions
       }
       
       throw error

@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import { BarChart3, Copy, RotateCcw, Download, Users, Filter, TrendingUp, Award, Target } from 'lucide-react'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
-import { classService, studentService, quizResultService } from '../lib/supabaseServices'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
+import { classService, studentService, quizResultService } from '../lib/firebaseServices'
 import { limitsService } from '../lib/subscriptionService'
 import { interrogationService, type WeightedStudent } from '../lib/interrogationService'
 import type { Class, StudentStats } from '../types'
 
 export function Statistics() {
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
   const [classes, setClasses] = useState<Class[]>([])
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
   const [studentStats, setStudentStats] = useState<StudentStats[]>([])
@@ -45,10 +45,10 @@ export function Statistics() {
   }, [selectedClass, showAllClasses])
 
   const loadClasses = async () => {
-    if (!user?.id) return
+    if (!user?.uid) return
 
     try {
-      const data = await classService.getByTeacher(user.id)
+      const data = await classService.getByTeacher(user.uid)
       setClasses(data)
     } catch (error) {
       console.error('Erreur:', error)
@@ -56,10 +56,10 @@ export function Statistics() {
   }
 
   const loadUserLimits = async () => {
-    if (!user?.id) return
+    if (!user?.uid) return
 
     try {
-      const limits = await limitsService.getUserLimits(user.id)
+      const limits = await limitsService.getUserLimits(user.uid)
       setUserLimits(limits)
     } catch (error) {
       console.error('Erreur lors du chargement des limites:', error)
@@ -78,7 +78,7 @@ export function Statistics() {
       setWeightedStudents(weightedData)
       
       // Récupérer tous les résultats de quiz pour cette classe
-      const allResults = await quizResultService.getByTeacher(user?.id || '')
+      const allResults = await quizResultService.getByTeacher(user?.uid || '')
       const classResults = allResults.filter(result => result.class_id === classId)
 
       const stats: StudentStats[] = students.map(student => {
@@ -155,10 +155,10 @@ export function Statistics() {
     
     try {
       // Récupérer toutes les classes du professeur
-      const allClasses = await classService.getByTeacher(user?.id || '')
+      const allClasses = await classService.getByTeacher(user?.uid || '')
       
       // Récupérer tous les résultats de quiz
-      const allResults = await quizResultService.getByTeacher(user?.id || '')
+      const allResults = await quizResultService.getByTeacher(user?.uid || '')
 
       const stats: StudentStats[] = []
       const allWeightedStudents: WeightedStudent[] = []
@@ -209,7 +209,7 @@ export function Statistics() {
     
     try {
       // Récupérer tous les résultats de quiz pour cette classe
-      const allResults = await quizResultService.getByTeacher(user?.id || '')
+      const allResults = await quizResultService.getByTeacher(user?.uid || '')
       const classResults = allResults.filter(result => result.class_id === selectedClass.id)
       
       // Supprimer chaque résultat individuellement
@@ -238,7 +238,7 @@ export function Statistics() {
     
     try {
       // Récupérer tous les résultats de quiz du professeur
-      const allResults = await quizResultService.getByTeacher(user?.id || '')
+      const allResults = await quizResultService.getByTeacher(user?.uid || '')
       
       // Supprimer chaque résultat individuellement
       for (const result of allResults) {
@@ -336,7 +336,7 @@ export function Statistics() {
   }
 
   const saveEdit = async () => {
-    if (!editingStudent || !user?.id) return
+    if (!editingStudent || !user?.uid) return
 
     setLoading(true)
     try {
@@ -358,7 +358,7 @@ export function Statistics() {
       }
 
       // Récupérer tous les résultats existants pour cet élève
-      const allResults = await quizResultService.getByTeacher(user.id)
+      const allResults = await quizResultService.getByTeacher(user.uid)
       const studentResults = allResults.filter(result => 
         result.student_id === editingStudent && result.class_id === classId
       )
@@ -372,8 +372,12 @@ export function Statistics() {
       if (editValues.total_questions > 0) {
         await quizResultService.create({
           student_id: editingStudent,
-          question_id: '', // Pas de question spécifique pour l'édition manuelle
-          is_correct: editValues.correct_answers === editValues.total_questions
+          class_id: classId,
+          teacher_id: user.uid,
+          score: editValues.correct_answers,
+          total_questions: editValues.total_questions,
+          answers: [],
+          created_at: new Date()
         })
       }
 

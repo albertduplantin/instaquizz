@@ -1,4 +1,4 @@
-import { classService, studentService, questionService, quizResultService } from './supabaseServices'
+import { classService, studentService, questionService, quizResultService } from './firebaseServices'
 import { storageService } from './storageService'
 import type { Class, Student, Question } from '../types'
 import type { SupabaseQuizResult } from './supabaseServices'
@@ -52,12 +52,8 @@ export class UsageStatsService {
       }
 
       // Récupérer tous les résultats de quiz de l'utilisateur
-      // Note: Pour Supabase, on doit récupérer par étudiant puisqu'il n'y a pas de teacher_id dans quiz_results
-      let allQuizResults: SupabaseQuizResult[] = []
-      for (const student of students) {
-        const studentResults = await quizResultService.getByStudent(student.id!)
-        allQuizResults.push(...studentResults)
-      }
+      // Note: Pour Firebase, on récupère par teacher_id directement
+      const allQuizResults = await quizResultService.getByTeacher(userId)
 
       // Filtrer côté client pour les 30 derniers jours
       const thirtyDaysAgo = new Date()

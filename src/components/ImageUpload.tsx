@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react'
 import { Upload, X, Image as ImageIcon, Loader2, Zap } from 'lucide-react'
-import { imageService } from '../lib/supabaseServices'
+import { imageService } from '../lib/firebaseServices'
 import { ImageCompressionService } from '../lib/imageCompression'
 import { storageService } from '../lib/storageService'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
 import { limitsService } from '../lib/subscriptionService'
 
 interface ImageUploadProps {
@@ -27,7 +27,7 @@ export function ImageUpload({
   const [isCompressing, setIsCompressing] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {

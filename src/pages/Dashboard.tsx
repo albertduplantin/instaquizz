@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Users, HelpCircle, BarChart3, Plus, HardDrive } from 'lucide-react'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
-import { classService, studentService, questionService, quizResultService } from '../lib/supabaseServices'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
+import { classService, studentService, questionService, quizResultService } from '../lib/firebaseServices'
 import { limitsService } from '../lib/subscriptionService'
 import { storageService } from '../lib/storageService'
 import type { UserLimitsWithPlan } from '../types'
@@ -11,7 +11,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onPageChange }: DashboardProps) {
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
   const [stats, setStats] = useState({
     totalClasses: 0,
     totalStudents: 0,
@@ -30,13 +30,13 @@ export function Dashboard({ onPageChange }: DashboardProps) {
   }, [user])
 
   const loadUserLimits = async () => {
-    if (!user?.id) {
+    if (!user?.uid) {
       console.log('🔍 loadUserLimits: Pas d\'utilisateur connecté')
       return
     }
-    console.log('🔍 loadUserLimits: Chargement des limites pour l\'utilisateur:', user.id)
+    console.log('🔍 loadUserLimits: Chargement des limites pour l\'utilisateur:', user.uid)
     try {
-      const limits = await limitsService.getUserLimits(user.id)
+      const limits = await limitsService.getUserLimits(user.uid)
       console.log('✅ loadUserLimits: Limites chargées avec succès:', limits)
       setUserLimits(limits)
     } catch (error) {
@@ -45,14 +45,14 @@ export function Dashboard({ onPageChange }: DashboardProps) {
   }
 
   const calculateStorageUsed = async () => {
-    if (!user?.id) {
+    if (!user?.uid) {
       console.log('🔍 calculateStorageUsed: Pas d\'utilisateur connecté')
       return
     }
-    console.log('🔍 calculateStorageUsed: Calcul du stockage pour l\'utilisateur:', user.id)
+    console.log('🔍 calculateStorageUsed: Calcul du stockage pour l\'utilisateur:', user.uid)
     try {
       // Calcul réel du stockage utilisé par l'utilisateur
-      const realStorageGB = await storageService.calculateUserStorage(user.id)
+      const realStorageGB = await storageService.calculateUserStorage(user.uid)
       console.log('✅ calculateStorageUsed: Stockage calculé avec succès:', realStorageGB, 'GB')
       setStorageUsed(realStorageGB)
     } catch (error) {
@@ -60,7 +60,7 @@ export function Dashboard({ onPageChange }: DashboardProps) {
       // Fallback : estimation basée sur les questions
       try {
         console.log('🔄 calculateStorageUsed: Tentative de fallback...')
-        const classes = await classService.getByTeacher(user.id)
+        const classes = await classService.getByTeacher(user.uid)
         let totalQuestions = 0
         for (const classItem of classes) {
           const questions = await questionService.getByClass(classItem.id!)
@@ -81,16 +81,16 @@ export function Dashboard({ onPageChange }: DashboardProps) {
   }
 
   const loadStats = async () => {
-    if (!user?.id) {
+    if (!user?.uid) {
       console.log('🔍 loadStats: Pas d\'utilisateur connecté')
       return
     }
-    console.log('🔍 loadStats: Chargement des statistiques pour l\'utilisateur:', user.id)
+    console.log('🔍 loadStats: Chargement des statistiques pour l\'utilisateur:', user.uid)
 
     try {
       // Récupérer toutes les classes du professeur
       console.log('📊 loadStats: Récupération des classes...')
-      const classes = await classService.getByTeacher(user.id)
+      const classes = await classService.getByTeacher(user.uid)
       console.log('✅ loadStats: Classes récupérées:', classes.length)
       
       // Récupérer tous les étudiants de toutes les classes
@@ -111,7 +111,7 @@ export function Dashboard({ onPageChange }: DashboardProps) {
 
       // Récupérer tous les résultats de quiz
       console.log('📊 loadStats: Récupération des résultats de quiz...')
-      const quizResults = await quizResultService.getByTeacher(user.id)
+      const quizResults = await quizResultService.getByTeacher(user.uid)
       const totalQuizzes = quizResults.length
       console.log('✅ loadStats: Résultats de quiz récupérés:', totalQuizzes)
 

@@ -10,7 +10,7 @@ import { SubscriptionManagement } from './pages/SubscriptionManagement'
 import { AdminDashboard } from './pages/AdminDashboard'
 import { Support } from './pages/Support'
 import { HelpCenter } from './pages/HelpCenter'
-import { useSupabaseAuth } from './hooks/useSupabaseAuth' // CHANGEMENT: Utiliser Supabase
+import { useFirebaseAuth } from './hooks/useFirebaseAuth' // CHANGEMENT: Utiliser Firebase
 import { useUserProfile } from './hooks/useUserProfile'
 import { useNavigation } from './hooks/useNavigation'
 import { ToastContainer } from './components/Toast'
@@ -20,7 +20,7 @@ import './App.css'
 import './themes.css'
 
 function AppContent() {
-  const { user, loading } = useSupabaseAuth() // CHANGEMENT: Utiliser Supabase
+  const { user, loading } = useFirebaseAuth() // CHANGEMENT: Utiliser Firebase
   useUserProfile() // Gérer automatiquement les profils utilisateur
   const { currentPage, navigateTo } = useNavigation()
   const { toasts, removeToast } = useToastContext()

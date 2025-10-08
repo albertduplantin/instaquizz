@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Shuffle, Users, HelpCircle, Check, X, RotateCcw, Target } from 'lucide-react'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
-import { classService, studentService, questionService, quizResultService } from '../lib/supabaseServices'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
+import { classService, studentService, questionService, quizResultService } from '../lib/firebaseServices'
 import { interrogationService, type WeightedStudent } from '../lib/interrogationService'
 import { FormattedText } from '../components/FormattedText'
 import type { Class, Student, Question } from '../types'
 import type { SupabaseQuizResult } from '../lib/supabaseServices'
 
 export function Quiz() {
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
   const [classes, setClasses] = useState<Class[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [weightedStudents, setWeightedStudents] = useState<WeightedStudent[]>([])
@@ -40,13 +40,13 @@ export function Quiz() {
   // Charger les résultats de quiz pour la classe sélectionnée
   const loadQuizResults = useCallback(async (classId: string) => {
     try {
-      const results = await quizResultService.getByTeacher(user?.id || '')
+      const results = await quizResultService.getByTeacher(user?.uid || '')
       const classResults = results.filter(result => result.class_id === classId)
       setQuizResults(classResults)
     } catch (error) {
       console.error('Erreur lors du chargement des résultats de quiz:', error)
     }
-  }, [user?.id])
+  }, [user?.uid])
 
   const loadQuestions = useCallback(async (classId: string) => {
     if (!classId) return
@@ -132,10 +132,10 @@ export function Quiz() {
   }, [students, currentStudent])
 
   const loadClasses = async () => {
-    if (!user?.id) return
+    if (!user?.uid) return
 
     try {
-      const data = await classService.getByTeacher(user.id)
+      const data = await classService.getByTeacher(user.uid)
       setClasses(data)
     } catch (error) {
       console.error('Erreur:', error)
@@ -202,7 +202,7 @@ export function Quiz() {
   }
 
   const submitAnswer = async (isCorrect: boolean) => {
-    if (!currentStudent || !currentQuestion || !user?.id || !selectedClass) return
+    if (!currentStudent || !currentQuestion || !user?.uid || !selectedClass) return
 
     // Arrêter le timer quand une réponse est soumise
     stopTimer()
@@ -212,8 +212,15 @@ export function Quiz() {
       // Enregistrer le résultat du quiz
       await quizResultService.create({
         student_id: currentStudent.id!,
-        question_id: currentQuestion.id,
-        is_correct: isCorrect
+        class_id: selectedClass.id!,
+        teacher_id: user.uid,
+        score: isCorrect ? 1 : 0,
+        total_questions: 1,
+        answers: [{
+          question_id: currentQuestion.id,
+          is_correct: isCorrect
+        }],
+        created_at: new Date()
       })
 
       // Enregistrer l'interrogation pour le système de tirage au sort intelligent

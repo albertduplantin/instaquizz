@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, CreditCard, Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
 import { limitsService } from '../lib/subscriptionService'
 import { quotaValidationService, type QuotaValidationResult } from '../lib/quotaValidationService'
 import { QuotaViolationModal } from '../components/QuotaViolationModal'
@@ -11,7 +11,7 @@ interface SubscriptionManagementProps {
 }
 
 export function SubscriptionManagement({ onPageChange }: SubscriptionManagementProps) {
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
   const [subscription, setSubscription] = useState<UserLimitsWithPlan | null>(null)
   const [loading, setLoading] = useState(true)
   const [showQuotaModal, setShowQuotaModal] = useState(false)
@@ -27,7 +27,7 @@ export function SubscriptionManagement({ onPageChange }: SubscriptionManagementP
   const loadSubscription = async () => {
     if (!user?.id) return
     try {
-      const limits = await limitsService.getUserLimits(user.id)
+      const limits = await limitsService.getUserLimits(user.uid)
       setSubscription(limits)
     } catch (error) {
       console.error('Erreur lors du chargement de l\'abonnement:', error)
@@ -46,7 +46,7 @@ export function SubscriptionManagement({ onPageChange }: SubscriptionManagementP
     
     try {
       setLoading(true)
-      const validation = await quotaValidationService.validateDowngrade(user.id, targetPlan)
+      const validation = await quotaValidationService.validateDowngrade(user.uid, targetPlan)
       setQuotaValidation(validation)
       setSelectedDowngradePlan(targetPlan)
       setShowQuotaModal(true)

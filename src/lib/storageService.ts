@@ -3,8 +3,8 @@ export const storageService = {
   async calculateUserStorage(userId: string): Promise<number> {
     try {
       // Récupérer toutes les questions de l'utilisateur pour trouver les images
-      const { questionService } = await import('./supabaseServices')
-      const { classService } = await import('./supabaseServices')
+      const { questionService } = await import('./firebaseServices')
+      const { classService } = await import('./firebaseServices')
       
       const classes = await classService.getByTeacher(userId)
       

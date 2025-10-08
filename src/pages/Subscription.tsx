@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { CreditCard, Settings, BarChart3, Users, HelpCircle, HardDrive, Calendar, TrendingUp } from 'lucide-react'
 import { SubscriptionPlans, CurrentLimits } from '../components/SubscriptionPlans'
 import { subscriptionService } from '../lib/subscriptionService'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
 import { UsageStatsService, type UsageStats } from '../lib/usageStatsService'
 import type { UserSubscription } from '../types'
 
@@ -12,7 +12,7 @@ export function Subscription() {
   const [loading, setLoading] = useState(true)
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
 
   useEffect(() => {
     if (user) {
@@ -30,7 +30,7 @@ export function Subscription() {
     if (!user) return
     
     try {
-      const subscription = await subscriptionService.getByUser(user.id)
+      const subscription = await subscriptionService.getByUser(user.uid)
       setCurrentSubscription(subscription)
     } catch (error) {
       console.error('Erreur lors du chargement de l\'abonnement:', error)
@@ -44,7 +44,7 @@ export function Subscription() {
     
     setStatsLoading(true)
     try {
-      const stats = await UsageStatsService.getUserUsageStats(user.id)
+      const stats = await UsageStatsService.getUserUsageStats(user.uid)
       setUsageStats(stats)
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques:', error)

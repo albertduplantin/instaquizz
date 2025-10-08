@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Edit2, Trash2, Search, BookOpen, Users, Upload, FileText, Download } from 'lucide-react'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
-import { classService, questionService } from '../lib/supabaseServices'
+import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
+import { classService, questionService } from '../lib/firebaseServices'
 import { limitsService } from '../lib/subscriptionService'
 import { ImageUpload } from '../components/ImageUpload'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -13,7 +13,7 @@ import { useToastContext } from '../contexts/ToastContext'
 import type { Question, Class, QuestionLink } from '../types'
 
 export function Questions() {
-  const { user } = useSupabaseAuth()
+  const { user } = useFirebaseAuth()
   const { showSuccess, showError, showWarning, showInfo } = useToastContext()
   const [classes, setClasses] = useState<Class[]>([])
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
@@ -105,9 +105,9 @@ export function Questions() {
 
   const fetchClasses = async () => {
     try {
-      if (!user?.id) return
+      if (!user?.uid) return
       
-      const data = await classService.getByTeacher(user.id)
+      const data = await classService.getByTeacher(user.uid)
       setClasses(data)
     } catch (error) {
       console.error('Erreur lors du chargement des classes:', error)
@@ -132,12 +132,12 @@ export function Questions() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedClass || !formData.content.trim() || !user?.id) return
+    if (!selectedClass || !formData.content.trim() || !user?.uid) return
 
     try {
       // Vérifier les limites avant d'ajouter une question (seulement pour les nouvelles questions)
       if (!editingQuestion) {
-        const canAdd = await limitsService.canAddQuestion(user.id, selectedClass.id!, questions.length)
+        const canAdd = await limitsService.canAddQuestion(user.uid, selectedClass.id!, questions.length)
         
         if (!canAdd.allowed) {
           handleLimitAlert(canAdd)
@@ -165,7 +165,7 @@ export function Questions() {
         const createData: any = {
           content: formData.content,
           class_id: selectedClass.id!,
-          teacher_id: user.id,
+          teacher_id: user.uid,
           created_at: new Date(),
         }
         if (formData.image_url) {
@@ -225,7 +225,7 @@ export function Questions() {
   }
 
   const confirmResetAllQuestions = async () => {
-    if (!selectedClass || !user?.id) return
+    if (!selectedClass || !user?.uid) return
 
     try {
       // Supprimer toutes les questions de la classe
@@ -292,7 +292,7 @@ export function Questions() {
       
       let canAdd
       try {
-        canAdd = await limitsService.canAddQuestion(user.id, selectedClass.id!, questions.length)
+        canAdd = await limitsService.canAddQuestion(user.uid, selectedClass.id!, questions.length)
       } catch (error) {
         console.error('❌ ERREUR LIMITES:', error)
         throw error
@@ -313,7 +313,7 @@ export function Questions() {
           const questionsToInsert = limitedContents.map(content => ({
             content,
             class_id: selectedClass.id!,
-            teacher_id: user.id,
+            teacher_id: user.uid,
             created_at: new Date(),
             // Ne pas inclure image_url et image_alt si pas d'image
           }))
@@ -344,7 +344,7 @@ export function Questions() {
       const questionsToInsert = uniqueContents.map(content => ({
         content,
         class_id: selectedClass.id!,
-        teacher_id: user.id,
+        teacher_id: user.uid,
         created_at: new Date(),
         // Ne pas inclure image_url et image_alt si pas d'image
       }))
