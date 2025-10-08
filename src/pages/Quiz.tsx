@@ -5,7 +5,7 @@ import { classService, studentService, questionService, quizResultService } from
 import { interrogationService, type WeightedStudent } from '../lib/interrogationService'
 import { FormattedText } from '../components/FormattedText'
 import type { Class, Student, Question } from '../types'
-import type { SupabaseQuizResult } from '../lib/supabaseServices'
+import type { FirebaseQuizResult } from '../lib/firebaseServices'
 
 export function Quiz() {
   const { user } = useFirebaseAuth()
@@ -13,7 +13,7 @@ export function Quiz() {
   const [students, setStudents] = useState<Student[]>([])
   const [weightedStudents, setWeightedStudents] = useState<WeightedStudent[]>([])
   const [questions, setQuestions] = useState<Question[]>([])
-  const [quizResults, setQuizResults] = useState<SupabaseQuizResult[]>([])
+  const [quizResults, setQuizResults] = useState<FirebaseQuizResult[]>([])
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null)
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null)
