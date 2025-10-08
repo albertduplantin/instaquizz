@@ -1,0 +1,189 @@
+/* Variables CSS pour les thèmes */
+:root {
+  --theme-primary: #3B82F6;
+  --theme-secondary: #1E40AF;
+  --theme-background: #FFFFFF;
+  --theme-text: #1F2937;
+}
+
+/* Thème par défaut (Classique) */
+.theme-default {
+  --theme-primary: #3B82F6;
+  --theme-secondary: #1E40AF;
+  --theme-background: #FFFFFF;
+  --theme-text: #1F2937;
+}
+
+/* Thème sombre */
+.theme-dark {
+  --theme-primary: #8B5CF6;
+  --theme-secondary: #7C3AED;
+  --theme-background: #1F2937;
+  --theme-text: #F9FAFB;
+}
+
+/* Thème Nature (vert) */
+.theme-green {
+  --theme-primary: #10B981;
+  --theme-secondary: #059669;
+  --theme-background: #FFFFFF;
+  --theme-text: #1F2937;
+}
+
+/* Thème Énergique (orange) */
+.theme-orange {
+  --theme-primary: #F59E0B;
+  --theme-secondary: #D97706;
+  --theme-background: #FFFFFF;
+  --theme-text: #1F2937;
+}
+
+/* Thème Passion (rouge) */
+.theme-red {
+  --theme-primary: #EF4444;
+  --theme-secondary: #DC2626;
+  --theme-background: #FFFFFF;
+  --theme-text: #1F2937;
+}
+
+/* Application des couleurs de thème */
+.theme-primary {
+  background-color: var(--theme-primary) !important;
+  color: white !important;
+}
+
+.theme-primary-text {
+  color: var(--theme-primary) !important;
+}
+
+.theme-secondary {
+  background-color: var(--theme-secondary) !important;
+  color: white !important;
+}
+
+.theme-secondary-text {
+  color: var(--theme-secondary) !important;
+}
+
+.theme-background {
+  background-color: var(--theme-background) !important;
+}
+
+.theme-text {
+  color: var(--theme-text) !important;
+}
+
+/* Classes utilitaires pour les thèmes */
+.bg-theme-primary {
+  background-color: var(--theme-primary) !important;
+}
+
+.text-theme-primary {
+  color: var(--theme-primary) !important;
+}
+
+.border-theme-primary {
+  border-color: var(--theme-primary) !important;
+}
+
+.hover\:bg-theme-primary:hover {
+  background-color: var(--theme-primary) !important;
+}
+
+.hover\:text-theme-primary:hover {
+  color: var(--theme-primary) !important;
+}
+
+/* Application globale du thème */
+body {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Styles pour les éléments principaux */
+.bg-blue-600 {
+  background-color: var(--theme-primary) !important;
+}
+
+.text-blue-600 {
+  color: var(--theme-primary) !important;
+}
+
+.border-blue-600 {
+  border-color: var(--theme-primary) !important;
+}
+
+.hover\:bg-blue-700:hover {
+  background-color: var(--theme-secondary) !important;
+}
+
+.hover\:text-blue-700:hover {
+  color: var(--theme-secondary) !important;
+}
+
+/* Boutons principaux */
+.btn-primary {
+  background-color: var(--theme-primary);
+  color: white;
+  border: 1px solid var(--theme-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--theme-secondary);
+  border-color: var(--theme-secondary);
+}
+
+/* Cartes et éléments */
+.card {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Navigation */
+.nav-item.active {
+  background-color: var(--theme-primary);
+  color: white;
+}
+
+.nav-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Thème sombre spécifique */
+.theme-dark .card {
+  background-color: #374151;
+  border-color: #4B5563;
+}
+
+.theme-dark .nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark .bg-gray-50 {
+  background-color: #374151 !important;
+}
+
+.theme-dark .text-gray-600 {
+  color: #D1D5DB !important;
+}
+
+.theme-dark .text-gray-700 {
+  color: #E5E7EB !important;
+}
+
+.theme-dark .text-gray-900 {
+  color: #F9FAFB !important;
+}
+
+.theme-dark .border-gray-200 {
+  border-color: #4B5563 !important;
+}
+
+.theme-dark .bg-white {
+  background-color: #374151 !important;
+}
+
+
+

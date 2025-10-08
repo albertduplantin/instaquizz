@@ -1,0 +1,44 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://instaquizz.vercel.app/sitemap.xml
+
+# Crawl-delay pour éviter la surcharge
+Crawl-delay: 1
+
+# Interdire l'indexation des pages privées
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /classes
+Disallow: /questions
+Disallow: /quiz
+Disallow: /statistics
+Disallow: /subscription-management
+
+# Autoriser les pages publiques
+Allow: /auth
+Allow: /subscription
+Allow: /support
+Allow: /features
+Allow: /pricing
+Allow: /blog
+Allow: /contact
+Allow: /privacy
+Allow: /terms
+
+# Fichiers à ne pas indexer
+Disallow: /*.json$
+Disallow: /*.js$
+Disallow: /*.css$
+Disallow: /*.png$
+Disallow: /*.jpg$
+Disallow: /*.jpeg$
+Disallow: /*.gif$
+Disallow: /*.svg$
+Disallow: /*.ico$
+
+
+
+
+

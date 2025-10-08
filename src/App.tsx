@@ -1,54 +1,29 @@
-import { useState } from 'react'
 import { Layout } from './components/Layout'
 import { Auth } from './components/Auth'
 import { Dashboard } from './pages/Dashboard'
 import { Classes } from './pages/Classes'
-import { ClassesFirebase } from './pages/ClassesFirebase'
 import { Questions } from './pages/Questions'
 import { Quiz } from './pages/Quiz'
 import { Statistics } from './pages/Statistics'
-import { useAuth } from './hooks/useAuth'
+import { Subscription } from './pages/Subscription'
+import { SubscriptionManagement } from './pages/SubscriptionManagement'
+import { AdminDashboard } from './pages/AdminDashboard'
+import { Support } from './pages/Support'
+import { HelpCenter } from './pages/HelpCenter'
+import { useSupabaseAuth } from './hooks/useSupabaseAuth' // CHANGEMENT: Utiliser Supabase
+import { useUserProfile } from './hooks/useUserProfile'
+import { useNavigation } from './hooks/useNavigation'
+import { ToastContainer } from './components/Toast'
+import { ToastProvider, useToastContext } from './contexts/ToastContext'
+import SEO from './components/SEO'
 import './App.css'
+import './themes.css'
 
-// Composant de basculement pour la migration
-function MigrationToggle({ onToggle, isFirebase }: { onToggle: () => void, isFirebase: boolean }) {
-  return (
-    <div className="fixed top-4 right-4 z-50">
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3">
-        <div className="flex items-center space-x-3">
-          <div className="text-sm font-medium text-gray-700">
-            Migration Firebase
-          </div>
-          <button
-            onClick={onToggle}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              isFirebase ? 'bg-blue-600' : 'bg-gray-200'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                isFirebase ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-          <span className={`text-xs font-medium ${
-            isFirebase ? 'text-blue-600' : 'text-gray-500'
-          }`}>
-            {isFirebase ? 'ON' : 'OFF'}
-          </span>
-        </div>
-        <div className="text-xs text-gray-500 mt-1">
-          {isFirebase ? '🔥 Firebase' : '⚡ Supabase'}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function App() {
-  const { user, loading } = useAuth()
-  const [currentPage, setCurrentPage] = useState('dashboard')
-  const [useFirebase, setUseFirebase] = useState(false) // Restons sur Supabase par défaut
+function AppContent() {
+  const { user, loading } = useSupabaseAuth() // CHANGEMENT: Utiliser Supabase
+  useUserProfile() // Gérer automatiquement les profils utilisateur
+  const { currentPage, navigateTo } = useNavigation()
+  const { toasts, removeToast } = useToastContext()
 
   if (loading) {
     return (
@@ -68,30 +43,46 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard onPageChange={setCurrentPage} />
+        return <Dashboard onPageChange={navigateTo} />
       case 'classes':
-        return useFirebase ? <ClassesFirebase /> : <Classes />
+        return <Classes onPageChange={navigateTo} />
       case 'questions':
         return <Questions />
       case 'quiz':
         return <Quiz />
       case 'stats':
         return <Statistics />
+      case 'subscription':
+        return <Subscription />
+      case 'subscription-management':
+        return <SubscriptionManagement onPageChange={navigateTo} />
+      case 'support':
+        return <Support />
+      case 'help':
+        return <HelpCenter onPageChange={navigateTo} />
+      case 'admin':
+        return <AdminDashboard />
       default:
-        return <Dashboard onPageChange={setCurrentPage} />
+        return <Dashboard onPageChange={navigateTo} />
     }
   }
 
   return (
     <div className="App">
-      <MigrationToggle 
-        onToggle={() => setUseFirebase(!useFirebase)} 
-        isFirebase={useFirebase} 
-      />
-      <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
+      <SEO />
+      <Layout currentPage={currentPage} onPageChange={navigateTo}>
         {renderPage()}
       </Layout>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
+  )
+}
+
+function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   )
 }
 

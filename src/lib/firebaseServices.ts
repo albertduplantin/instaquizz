@@ -1,223 +1,194 @@
 import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signOut
-} from 'firebase/auth'
-import { 
   collection, 
   addDoc, 
   getDocs, 
+  doc, 
+  updateDoc, 
+  deleteDoc, 
   query, 
-  where, 
-  orderBy,
-  limit
+  where
 } from 'firebase/firestore'
-import { auth, db } from './firebase'
+import { 
+  ref, 
+  uploadBytes, 
+  getDownloadURL, 
+  deleteObject 
+} from 'firebase/storage'
+import { db, storage } from './firebase'
 
 // Types
-export interface Teacher {
-  id: string
-  email: string
-  name: string
-  created_at: string
-}
-
-export interface Class {
-  id: string
+export interface FirebaseClass {
+  id?: string
   name: string
   teacher_id: string
-  created_at: string
+  created_at: any
 }
 
-export interface Student {
-  id: string
+export interface FirebaseStudent {
+  id?: string
   name: string
   class_id: string
-  created_at: string
+  created_at: any
 }
 
-export interface Question {
-  id: string
+export interface FirebaseQuestion {
+  id?: string
   content: string
   class_id: string
   teacher_id: string
-  created_at: string
+  image_url?: string
+  image_alt?: string
+  links?: Array<{
+    id: string
+    url: string
+    title: string
+    description?: string
+  }>
+  created_at: any
 }
 
-export interface QuizResult {
-  id: string
+export interface FirebaseQuizResult {
+  id?: string
   student_id: string
-  question_id: string
   class_id: string
-  is_correct: boolean
-  created_at: string
+  teacher_id: string
+  score: number
+  total_questions: number
+  answers: any[]
+  created_at: any
 }
 
-// Authentification
-export const signIn = async (email: string, password: string) => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password)
-    return { user: userCredential.user, error: null }
-  } catch (error) {
-    return { user: null, error }
-  }
-}
+// Services pour les Classes
+export const classService = {
+  async create(classData: Omit<FirebaseClass, 'id'>) {
+    const docRef = await addDoc(collection(db, 'classes'), classData)
+    return { id: docRef.id, ...classData }
+  },
 
-export const signUp = async (email: string, password: string, name: string) => {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-    
-    // Créer le profil enseignant
-    await addDoc(collection(db, 'teachers'), {
-      id: userCredential.user.uid,
-      email,
-      name,
-      created_at: new Date().toISOString()
-    })
-    
-    return { user: userCredential.user, error: null }
-  } catch (error) {
-    return { user: null, error }
-  }
-}
-
-export const signOutUser = async () => {
-  try {
-    await signOut(auth)
-    return { error: null }
-  } catch (error) {
-    return { error }
-  }
-}
-
-// Classes
-export const createClass = async (name: string, teacherId: string) => {
-  try {
-    const docRef = await addDoc(collection(db, 'classes'), {
-      name,
-      teacher_id: teacherId,
-      created_at: new Date().toISOString()
-    })
-    return { id: docRef.id, error: null }
-  } catch (error) {
-    return { id: null, error }
-  }
-}
-
-export const getClasses = async (teacherId: string) => {
-  try {
+  async getByTeacher(teacherId: string) {
     const q = query(
-      collection(db, 'classes'), 
-      where('teacher_id', '==', teacherId),
-      orderBy('created_at', 'desc')
+      collection(db, 'classes'),
+      where('teacher_id', '==', teacherId)
     )
-    const querySnapshot = await getDocs(q)
-    const classes = querySnapshot.docs.map((doc: any) => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Class[]
-    return { classes, error: null }
-  } catch (error) {
-    return { classes: [], error }
-  }
-}
-
-// Étudiants
-export const createStudent = async (name: string, classId: string) => {
-  try {
-    const docRef = await addDoc(collection(db, 'students'), {
-      name,
-      class_id: classId,
-      created_at: new Date().toISOString()
+    const snapshot = await getDocs(q)
+    const classes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirebaseClass & { id: string }))
+    // Trier côté client pour éviter le besoin d'index composite
+    return classes.sort((a, b) => {
+      const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at)
+      const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(b.created_at)
+      return dateB.getTime() - dateA.getTime()
     })
-    return { id: docRef.id, error: null }
-  } catch (error) {
-    return { id: null, error }
+  },
+
+  async update(id: string, data: Partial<FirebaseClass>) {
+    await updateDoc(doc(db, 'classes', id), data)
+  },
+
+  async delete(id: string) {
+    await deleteDoc(doc(db, 'classes', id))
   }
 }
 
-export const getStudents = async (classId: string) => {
-  try {
+// Services pour les Étudiants
+export const studentService = {
+  async create(studentData: Omit<FirebaseStudent, 'id'>) {
+    const docRef = await addDoc(collection(db, 'students'), studentData)
+    return { id: docRef.id, ...studentData }
+  },
+
+  async getByClass(classId: string) {
     const q = query(
-      collection(db, 'students'), 
-      where('class_id', '==', classId),
-      orderBy('created_at', 'desc')
+      collection(db, 'students'),
+      where('class_id', '==', classId)
     )
-    const querySnapshot = await getDocs(q)
-    const students = querySnapshot.docs.map((doc: any) => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Student[]
-    return { students, error: null }
-  } catch (error) {
-    return { students: [], error }
-  }
-}
-
-// Questions
-export const createQuestion = async (content: string, classId: string, teacherId: string) => {
-  try {
-    const docRef = await addDoc(collection(db, 'questions'), {
-      content,
-      class_id: classId,
-      teacher_id: teacherId,
-      created_at: new Date().toISOString()
+    const snapshot = await getDocs(q)
+    const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirebaseStudent & { id: string }))
+    // Trier côté client pour éviter le besoin d'index composite
+    return students.sort((a, b) => {
+      const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at)
+      const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(b.created_at)
+      return dateB.getTime() - dateA.getTime()
     })
-    return { id: docRef.id, error: null }
-  } catch (error) {
-    return { id: null, error }
+  },
+
+  async update(id: string, data: Partial<FirebaseStudent>) {
+    await updateDoc(doc(db, 'students', id), data)
+  },
+
+  async delete(id: string) {
+    await deleteDoc(doc(db, 'students', id))
   }
 }
 
-export const getQuestions = async (classId: string) => {
-  try {
+// Services pour les Questions
+export const questionService = {
+  async create(questionData: Omit<FirebaseQuestion, 'id'>) {
+    const docRef = await addDoc(collection(db, 'questions'), questionData)
+    return { id: docRef.id, ...questionData }
+  },
+
+  async getByClass(classId: string) {
     const q = query(
-      collection(db, 'questions'), 
-      where('class_id', '==', classId),
-      orderBy('created_at', 'desc')
+      collection(db, 'questions'),
+      where('class_id', '==', classId)
     )
-    const querySnapshot = await getDocs(q)
-    const questions = querySnapshot.docs.map((doc: any) => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Question[]
-    return { questions, error: null }
-  } catch (error) {
-    return { questions: [], error }
-  }
-}
-
-// Résultats de quiz
-export const saveQuizResult = async (studentId: string, questionId: string, classId: string, isCorrect: boolean) => {
-  try {
-    const docRef = await addDoc(collection(db, 'quiz_results'), {
-      student_id: studentId,
-      question_id: questionId,
-      class_id: classId,
-      is_correct: isCorrect,
-      created_at: new Date().toISOString()
+    const snapshot = await getDocs(q)
+    const questions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirebaseQuestion & { id: string }))
+    // Trier côté client pour éviter le besoin d'index composite
+    return questions.sort((a, b) => {
+      const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at)
+      const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(b.created_at)
+      return dateB.getTime() - dateA.getTime()
     })
-    return { id: docRef.id, error: null }
-  } catch (error) {
-    return { id: null, error }
+  },
+
+  async update(id: string, data: Partial<FirebaseQuestion>) {
+    await updateDoc(doc(db, 'questions', id), data)
+  },
+
+  async delete(id: string) {
+    await deleteDoc(doc(db, 'questions', id))
   }
 }
 
-export const getQuizResults = async (classId: string, limitCount: number = 50) => {
-  try {
+// Services pour les Résultats de Quiz
+export const quizResultService = {
+  async create(resultData: Omit<FirebaseQuizResult, 'id'>) {
+    const docRef = await addDoc(collection(db, 'quiz_results'), resultData)
+    return { id: docRef.id, ...resultData }
+  },
+
+  async getByTeacher(teacherId: string) {
     const q = query(
-      collection(db, 'quiz_results'), 
-      where('class_id', '==', classId),
-      orderBy('created_at', 'desc'),
-      limit(limitCount)
+      collection(db, 'quiz_results'),
+      where('teacher_id', '==', teacherId)
     )
-    const querySnapshot = await getDocs(q)
-    const results = querySnapshot.docs.map((doc: any) => ({
-      id: doc.id,
-      ...doc.data()
-    })) as QuizResult[]
-    return { results, error: null }
-  } catch (error) {
-    return { results: [], error }
+    const snapshot = await getDocs(q)
+    const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirebaseQuizResult))
+    // Trier côté client pour éviter le besoin d'index composite
+    return results.sort((a, b) => {
+      const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at)
+      const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(b.created_at)
+      return dateB.getTime() - dateA.getTime()
+    })
+  },
+
+  async delete(id: string) {
+    await deleteDoc(doc(db, 'quiz_results', id))
+  }
+}
+
+// Services pour le Stockage d'Images
+export const imageService = {
+  async uploadImage(file: File, path: string) {
+    const imageRef = ref(storage, path)
+    const snapshot = await uploadBytes(imageRef, file)
+    const downloadURL = await getDownloadURL(snapshot.ref)
+    return downloadURL
+  },
+
+  async deleteImage(path: string) {
+    const imageRef = ref(storage, path)
+    await deleteObject(imageRef)
   }
 }

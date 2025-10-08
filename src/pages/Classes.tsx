@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Plus, Users, Trash2, UserPlus, Edit2, Upload, FileText } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
+import { Plus, Users, Trash2, UserPlus, Edit2, Upload, FileText, AlertTriangle } from 'lucide-react'
+import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
+import { classService, studentService } from '../lib/supabaseServices'
+import { limitsService } from '../lib/subscriptionService'
 import type { Class, Student } from '../types'
 
-export function Classes() {
-  const { user } = useAuth()
+interface ClassesProps {
+  onPageChange: (page: string) => void
+}
+
+export function Classes({ onPageChange }: ClassesProps) {
+  const { user } = useSupabaseAuth()
   const [classes, setClasses] = useState<Class[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
@@ -21,6 +26,41 @@ export function Classes() {
   const [importStudentsText, setImportStudentsText] = useState('')
   const [importMethod, setImportMethod] = useState<'text' | 'file'>('text')
   const [loading, setLoading] = useState(false)
+  const [limitError, setLimitError] = useState<string | null>(null)
+  const [showLimitAlert, setShowLimitAlert] = useState(false)
+  const [limitAlertData, setLimitAlertData] = useState<{
+    limitType: 'classes' | 'students' | 'questions'
+    currentCount: number
+    maxCount: number
+    planName: string
+  } | null>(null)
+
+  // Fonctions de gestion des alertes
+  const handleLimitAlert = (limitCheck: any) => {
+    if (limitCheck.limitType && limitCheck.currentCount && limitCheck.maxCount && limitCheck.planName) {
+      setLimitAlertData({
+        limitType: limitCheck.limitType,
+        currentCount: limitCheck.currentCount,
+        maxCount: limitCheck.maxCount,
+        planName: limitCheck.planName
+      })
+      setShowLimitAlert(true)
+    } else {
+      setLimitError(limitCheck.reason || 'Limite atteinte')
+    }
+  }
+
+  const handleCloseLimitAlert = () => {
+    setShowLimitAlert(false)
+    setLimitAlertData(null)
+  }
+
+  const handleUpgrade = () => {
+    setShowLimitAlert(false)
+    setLimitAlertData(null)
+    // Redirection vers la page d'abonnement
+    onPageChange('subscription')
+  }
 
   useEffect(() => {
     if (user) {
@@ -37,30 +77,20 @@ export function Classes() {
   const loadClasses = async () => {
     if (!user) return
 
-    const { data, error } = await supabase
-      .from('classes')
-      .select('*')
-      .eq('teacher_id', user.id)
-      .order('name')
-
-    if (error) {
+    try {
+      const classesData = await classService.getByTeacher(user.id)
+      setClasses(classesData as Class[])
+    } catch (error) {
       console.error('Erreur:', error)
-    } else {
-      setClasses(data || [])
     }
   }
 
   const loadStudents = async (classId: string) => {
-    const { data, error } = await supabase
-      .from('students')
-      .select('*')
-      .eq('class_id', classId)
-      .order('name')
-
-    if (error) {
+    try {
+      const studentsData = await studentService.getByClass(classId)
+      setStudents(studentsData as Student[])
+    } catch (error) {
       console.error('Erreur:', error)
-    } else {
-      setStudents(data || [])
     }
   }
 
@@ -69,37 +99,56 @@ export function Classes() {
     if (!user) return
 
     setLoading(true)
-    const { data, error } = await supabase
-      .from('classes')
-      .insert([{ name: newClassName, teacher_id: user.id }])
-      .select()
+    setLimitError(null)
+    
+    try {
+      // Vérifier les limites avant de créer la classe
+      const canCreate = await limitsService.canCreateClass(user.id, classes.length)
+      
+      if (!canCreate.allowed) {
+        handleLimitAlert(canCreate)
+        setLoading(false)
+        return
+      }
 
-    if (error) {
-      console.error('Erreur:', error)
-    } else {
-      setClasses([...classes, ...data])
+      const newClass = await classService.create({
+        name: newClassName,
+        teacher_id: user.id
+      })
+      setClasses([...classes, newClass])
       setNewClassName('')
       setShowAddClass(false)
+    } catch (error) {
+      console.error('❌ Erreur création classe:', error)
     }
     setLoading(false)
   }
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedClass) return
+    if (!selectedClass || !user) return
 
     setLoading(true)
-    const { data, error } = await supabase
-      .from('students')
-      .insert([{ name: newStudentName, class_id: selectedClass.id }])
-      .select()
+    setLimitError(null)
+    
+    try {
+      // Vérifier les limites avant d'ajouter l'étudiant
+      const canAdd = await limitsService.canAddStudent(user.id, selectedClass.id!, students.length)
+      
+      if (!canAdd.allowed) {
+        handleLimitAlert(canAdd)
+        return
+      }
 
-    if (error) {
-      console.error('Erreur:', error)
-    } else {
-      setStudents([...students, ...data])
+      const newStudent = await studentService.create({
+        name: newStudentName,
+        class_id: selectedClass.id!
+      })
+      setStudents([...students, newStudent])
       setNewStudentName('')
       setShowAddStudent(false)
+    } catch (error) {
+      console.error('Erreur:', error)
     }
     setLoading(false)
   }
@@ -107,28 +156,26 @@ export function Classes() {
   const handleDeleteClass = async (classId: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette classe et tous ses élèves ?')) return
 
-    const { error } = await supabase.from('classes').delete().eq('id', classId)
-
-    if (error) {
-      console.error('Erreur:', error)
-    } else {
+    try {
+      await classService.delete(classId)
       setClasses(classes.filter(c => c.id !== classId))
       if (selectedClass?.id === classId) {
         setSelectedClass(null)
         setStudents([])
       }
+    } catch (error) {
+      console.error('Erreur:', error)
     }
   }
 
   const handleDeleteStudent = async (studentId: string) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cet élève ?')) return
 
-    const { error } = await supabase.from('students').delete().eq('id', studentId)
-
-    if (error) {
-      console.error('Erreur:', error)
-    } else {
+    try {
+      await studentService.delete(studentId)
       setStudents(students.filter(s => s.id !== studentId))
+    } catch (error) {
+      console.error('Erreur:', error)
     }
   }
 
@@ -142,14 +189,9 @@ export function Classes() {
     if (!editingClass || !editClassName.trim()) return
 
     setLoading(true)
-    const { error } = await supabase
-      .from('classes')
-      .update({ name: editClassName.trim() })
-      .eq('id', editingClass.id)
-
-    if (error) {
-      console.error('Erreur:', error)
-    } else {
+    try {
+      await classService.update(editingClass.id!, { name: editClassName.trim() })
+      
       // Mettre à jour la liste des classes
       setClasses(classes.map(c => 
         c.id === editingClass.id 
@@ -164,6 +206,8 @@ export function Classes() {
       
       setEditingClass(null)
       setEditClassName('')
+    } catch (error) {
+      console.error('Erreur:', error)
     }
     setLoading(false)
   }
@@ -183,14 +227,9 @@ export function Classes() {
     if (!editingStudent || !editStudentName.trim()) return
 
     setLoading(true)
-    const { error } = await supabase
-      .from('students')
-      .update({ name: editStudentName.trim() })
-      .eq('id', editingStudent.id)
-
-    if (error) {
-      console.error('Erreur:', error)
-    } else {
+    try {
+      await studentService.update(editingStudent.id!, { name: editStudentName.trim() })
+      
       // Mettre à jour la liste des élèves
       setStudents(students.map(s => 
         s.id === editingStudent.id 
@@ -200,6 +239,8 @@ export function Classes() {
       
       setEditingStudent(null)
       setEditStudentName('')
+    } catch (error) {
+      console.error('Erreur:', error)
     }
     setLoading(false)
   }
@@ -240,16 +281,12 @@ export function Classes() {
       }
 
       // Insérer les nouveaux élèves
-      const studentsToInsert = uniqueNames.map(name => ({
-        name,
-        class_id: selectedClass.id
-      }))
-
-      const { error } = await supabase
-        .from('students')
-        .insert(studentsToInsert)
-
-      if (error) throw error
+      for (const name of uniqueNames) {
+        await studentService.create({
+          name,
+          class_id: selectedClass.id!
+        })
+      }
 
       // Rafraîchir la liste
       await loadStudents(selectedClass.id)
@@ -440,6 +477,12 @@ export function Classes() {
                 className="input mb-4"
                 required
               />
+              {limitError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg flex items-center">
+                  <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
+                  <span className="text-sm">{limitError}</span>
+                </div>
+              )}
               <div className="flex justify-end space-x-2">
                 <button
                   type="button"
@@ -471,6 +514,12 @@ export function Classes() {
                 className="input mb-4"
                 required
               />
+              {limitError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg flex items-center">
+                  <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
+                  <span className="text-sm">{limitError}</span>
+                </div>
+              )}
               <div className="flex justify-end space-x-2">
                 <button
                   type="button"
@@ -687,6 +736,34 @@ export function Classes() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Alerte de limite */}
+      {showLimitAlert && limitAlertData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Limite atteinte
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Vous avez atteint la limite de {limitAlertData.maxCount} {limitAlertData.limitType} avec votre plan {limitAlertData.planName}.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleUpgrade}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Améliorer le plan
+              </button>
+              <button
+                onClick={handleCloseLimitAlert}
+                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
           </div>
         </div>
       )}

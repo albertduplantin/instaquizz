@@ -1,103 +1,214 @@
 import { useState, useEffect } from 'react'
-import { Users, HelpCircle, BarChart3, Plus } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
+import { Users, HelpCircle, BarChart3, Plus, HardDrive } from 'lucide-react'
+import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
+import { classService, studentService, questionService, quizResultService } from '../lib/supabaseServices'
+import { limitsService } from '../lib/subscriptionService'
+import { storageService } from '../lib/storageService'
+import type { UserLimitsWithPlan } from '../types'
 
 interface DashboardProps {
   onPageChange: (page: string) => void
 }
 
 export function Dashboard({ onPageChange }: DashboardProps) {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const [stats, setStats] = useState({
     totalClasses: 0,
     totalStudents: 0,
     totalQuestions: 0,
     totalQuizzes: 0,
   })
+  const [userLimits, setUserLimits] = useState<UserLimitsWithPlan | null>(null)
+  const [storageUsed, setStorageUsed] = useState(0)
 
   useEffect(() => {
     if (user) {
       loadStats()
+      loadUserLimits()
+      calculateStorageUsed()
     }
   }, [user])
 
-  const loadStats = async () => {
-    if (!user) return
-
+  const loadUserLimits = async () => {
+    if (!user?.id) {
+      console.log('🔍 loadUserLimits: Pas d\'utilisateur connecté')
+      return
+    }
+    console.log('🔍 loadUserLimits: Chargement des limites pour l\'utilisateur:', user.id)
     try {
-      // Compter les classes
-      const { count: classCount } = await supabase
-        .from('classes')
-        .select('*', { count: 'exact', head: true })
-        .eq('teacher_id', user.id)
-
-      // Compter les étudiants
-      const { count: studentCount } = await supabase
-        .from('students')
-        .select('*, classes!inner(*)', { count: 'exact', head: true })
-        .eq('classes.teacher_id', user.id)
-
-      // Compter les questions
-      const { count: questionCount } = await supabase
-        .from('questions')
-        .select('*', { count: 'exact', head: true })
-        .eq('teacher_id', user.id)
-
-      // Compter les quiz
-      const { count: quizCount } = await supabase
-        .from('quiz_results')
-        .select('*, students!inner(*, classes!inner(*))', { count: 'exact', head: true })
-        .eq('students.classes.teacher_id', user.id)
-
-      setStats({
-        totalClasses: classCount || 0,
-        totalStudents: studentCount || 0,
-        totalQuestions: questionCount || 0,
-        totalQuizzes: quizCount || 0,
-      })
+      const limits = await limitsService.getUserLimits(user.id)
+      console.log('✅ loadUserLimits: Limites chargées avec succès:', limits)
+      setUserLimits(limits)
     } catch (error) {
-      console.error('Erreur lors du chargement des statistiques:', error)
+      console.error('❌ loadUserLimits: Erreur lors du chargement des limites:', error)
     }
   }
 
-  const StatCard = ({ title, value, icon: Icon, color }: {
+  const calculateStorageUsed = async () => {
+    if (!user?.id) {
+      console.log('🔍 calculateStorageUsed: Pas d\'utilisateur connecté')
+      return
+    }
+    console.log('🔍 calculateStorageUsed: Calcul du stockage pour l\'utilisateur:', user.id)
+    try {
+      // Calcul réel du stockage utilisé par l'utilisateur
+      const realStorageGB = await storageService.calculateUserStorage(user.id)
+      console.log('✅ calculateStorageUsed: Stockage calculé avec succès:', realStorageGB, 'GB')
+      setStorageUsed(realStorageGB)
+    } catch (error) {
+      console.error('❌ calculateStorageUsed: Erreur lors du calcul du stockage:', error)
+      // Fallback : estimation basée sur les questions
+      try {
+        console.log('🔄 calculateStorageUsed: Tentative de fallback...')
+        const classes = await classService.getByTeacher(user.id)
+        let totalQuestions = 0
+        for (const classItem of classes) {
+          const questions = await questionService.getByClass(classItem.id!)
+          totalQuestions += questions.length
+        }
+        
+        // Estimation : 50KB par question (texte + image potentielle)
+        const estimatedStorageMB = (totalQuestions * 50) / 1024
+        const estimatedStorageGB = estimatedStorageMB / 1024
+        
+        console.log('✅ calculateStorageUsed: Fallback réussi:', estimatedStorageGB, 'GB')
+        setStorageUsed(estimatedStorageGB)
+      } catch (fallbackError) {
+        console.error('❌ calculateStorageUsed: Erreur lors du calcul de fallback:', fallbackError)
+        setStorageUsed(0)
+      }
+    }
+  }
+
+  const loadStats = async () => {
+    if (!user?.id) {
+      console.log('🔍 loadStats: Pas d\'utilisateur connecté')
+      return
+    }
+    console.log('🔍 loadStats: Chargement des statistiques pour l\'utilisateur:', user.id)
+
+    try {
+      // Récupérer toutes les classes du professeur
+      console.log('📊 loadStats: Récupération des classes...')
+      const classes = await classService.getByTeacher(user.id)
+      console.log('✅ loadStats: Classes récupérées:', classes.length)
+      
+      // Récupérer tous les étudiants de toutes les classes
+      let totalStudents = 0
+      for (const classItem of classes) {
+        const students = await studentService.getByClass(classItem.id!)
+        totalStudents += students.length
+      }
+      console.log('✅ loadStats: Étudiants récupérés:', totalStudents)
+
+      // Récupérer toutes les questions de toutes les classes
+      let totalQuestions = 0
+      for (const classItem of classes) {
+        const questions = await questionService.getByClass(classItem.id!)
+        totalQuestions += questions.length
+      }
+      console.log('✅ loadStats: Questions récupérées:', totalQuestions)
+
+      // Récupérer tous les résultats de quiz
+      console.log('📊 loadStats: Récupération des résultats de quiz...')
+      const quizResults = await quizResultService.getByTeacher(user.id)
+      const totalQuizzes = quizResults.length
+      console.log('✅ loadStats: Résultats de quiz récupérés:', totalQuizzes)
+
+      const statsData = {
+        totalClasses: classes.length,
+        totalStudents,
+        totalQuestions,
+        totalQuizzes,
+      }
+      console.log('✅ loadStats: Statistiques chargées avec succès:', statsData)
+      setStats(statsData)
+    } catch (error) {
+      console.error('❌ loadStats: Erreur lors du chargement des statistiques:', error)
+    }
+  }
+
+  const StatCard = ({ title, value, icon: Icon, color, max }: {
     title: string
     value: number
     icon: any
     color: string
-  }) => (
-    <div className="card">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+    max?: number
+  }) => {
+    const percentage = max && max !== -1 ? Math.min((value / max) * 100, 100) : 0
+    const isNearLimit = percentage >= 80
+    const isAtLimit = percentage >= 100
+
+    const getGaugeColor = () => {
+      if (isAtLimit) return 'bg-red-500'
+      if (isNearLimit) return 'bg-yellow-500'
+      return 'bg-green-500'
+    }
+
+    const formatValue = (val: number, isStorage: boolean = false) => {
+      if (isStorage) {
+        if (val < 1) {
+          // Moins de 1GB, afficher en MB avec 1 décimale
+          return `${(val * 1024).toFixed(1)}MB`
+        } else {
+          // 1GB ou plus, afficher en GB avec 2 décimales
+          return `${val.toFixed(2)}GB`
+        }
+      }
+      return val.toString()
+    }
+
+    const isStorage = title.toLowerCase().includes('stockage')
+
+    return (
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-sm font-medium text-gray-600">{title}</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {max && max !== -1 
+                ? `${formatValue(value, isStorage)}/${formatValue(max, isStorage)}` 
+                : formatValue(value, isStorage)
+              }
+            </p>
+          </div>
+          <div className={`p-3 rounded-full ${color}`}>
+            <Icon className="h-6 w-6 text-white" />
+          </div>
         </div>
-        <div className={`p-3 rounded-full ${color}`}>
-          <Icon className="h-6 w-6 text-white" />
-        </div>
+        
+        {max && max !== -1 && (
+          <div className="space-y-2">
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-300 ${getGaugeColor()}`}
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            {(isNearLimit || isStorage) && (
+              <p className={`text-xs ${isAtLimit ? 'text-red-600' : isNearLimit ? 'text-yellow-600' : 'text-gray-600'}`}>
+                {isAtLimit 
+                  ? 'Limite atteinte !' 
+                  : isStorage
+                    ? `${Math.round(100 - percentage)}% restant`
+                    : `${Math.round(100 - percentage)}% restant`
+                }
+              </p>
+            )}
+          </div>
+        )}
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="space-y-6">
-      {/* BOUTON TEST TOTO */}
-      <div className="bg-green-100 border border-green-300 rounded-lg p-4">
-        <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold">
-          TOTO
-        </button>
-        <p className="text-sm text-green-700 mt-2">
-          Si vous voyez ce bouton, les modifications sont prises en compte !
-        </p>
-      </div>
-      
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">
           Tableau de bord
         </h1>
         <div className="text-sm text-gray-600">
-          Bienvenue, {user?.user_metadata?.name || user?.email} !
+          Bienvenue, {user?.user_metadata?.display_name || user?.email} !
         </div>
       </div>
 
@@ -108,26 +219,76 @@ export function Dashboard({ onPageChange }: DashboardProps) {
           value={stats.totalClasses}
           icon={Users}
           color="bg-blue-500"
+          max={userLimits?.maxClasses}
         />
         <StatCard
           title="Élèves"
           value={stats.totalStudents}
           icon={Users}
           color="bg-green-500"
+          max={userLimits?.maxStudentsPerClass}
         />
         <StatCard
           title="Questions"
           value={stats.totalQuestions}
           icon={HelpCircle}
           color="bg-purple-500"
+          max={userLimits?.maxQuestionsPerClass}
         />
-        <StatCard
-          title="Quiz réalisés"
-          value={stats.totalQuizzes}
-          icon={BarChart3}
-          color="bg-orange-500"
-        />
+        <div className="relative">
+          <StatCard
+            title="Stockage utilisé"
+            value={storageUsed}
+            icon={HardDrive}
+            color="bg-orange-500"
+            max={userLimits?.maxStorageGB}
+          />
+          <button
+            onClick={calculateStorageUsed}
+            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            title="Actualiser le stockage"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {/* Plan actuel */}
+      {userLimits && (
+        <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-blue-900 mb-2">
+                📋 Plan actuel : {userLimits.planName}
+              </h2>
+              <p className="text-sm text-blue-700">
+                {userLimits.planName === 'Gratuit' 
+                  ? 'Plan gratuit - Limites de base'
+                  : `Plan payant - Accès complet jusqu'au ${userLimits.nextBillingDate || 'renouvellement automatique'}`
+                }
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {userLimits.planName !== 'Gratuit' && (
+                <button
+                  onClick={() => onPageChange('subscription-management')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                >
+                  Gérer l'abonnement
+                </button>
+              )}
+              <button
+                onClick={() => onPageChange('subscription')}
+                className="px-4 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors text-sm"
+              >
+                {userLimits.planName === 'Gratuit' ? 'Voir les plans' : 'Changer de plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Actions rapides */}
       <div className="card">

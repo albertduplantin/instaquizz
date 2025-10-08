@@ -7,17 +7,24 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "stripe:setup": "node setup-stripe-env.js",
+    "stripe:update": "node update-stripe-prices.js",
+    "stripe:test": "node update-stripe-prices.js test"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.50.2",
+    "@emailjs/browser": "^4.4.1",
+    "@stripe/stripe-js": "^7.9.0",
+    "@supabase/supabase-js": "^2.58.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.2",
     "firebase": "^12.2.1",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.3",
-    "recharts": "^3.0.2"
+    "recharts": "^3.0.2",
+    "stripe": "^18.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",

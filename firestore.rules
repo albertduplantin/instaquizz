@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Règles pour les profils utilisateur
+    match /userProfiles/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Règles pour les classes
+    match /classes/{classId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.teacher_id == request.auth.uid || 
+         request.resource.data.teacher_id == request.auth.uid);
+    }
+    
+    // Règles pour les étudiants
+    match /students/{studentId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.class_id != null && 
+         exists(/databases/$(database)/documents/classes/$(resource.data.class_id)) &&
+         get(/databases/$(database)/documents/classes/$(resource.data.class_id)).data.teacher_id == request.auth.uid) ||
+        (request.resource.data.class_id != null && 
+         exists(/databases/$(database)/documents/classes/$(request.resource.data.class_id)) &&
+         get(/databases/$(database)/documents/classes/$(request.resource.data.class_id)).data.teacher_id == request.auth.uid);
+    }
+    
+    // Règles pour les questions
+    match /questions/{questionId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.teacher_id == request.auth.uid || 
+         request.resource.data.teacher_id == request.auth.uid);
+    }
+    
+    // Règles pour les résultats de quiz
+    match /quiz_results/{resultId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.teacher_id == request.auth.uid || 
+         request.resource.data.teacher_id == request.auth.uid);
+    }
+    
+    // Règles pour les abonnements
+    match /subscriptions/{subscriptionId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.resource.data.userId == request.auth.uid);
+    }
+    
+    // Règles pour les statistiques d'usage (si vous en avez)
+    match /usage_stats/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Règles pour les sessions de quiz
+    match /quizSessions/{sessionId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.resource.data.userId == request.auth.uid);
+    }
+    
+    // Règles pour les administrateurs
+    match /admins/{adminId} {
+      allow read, write: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         request.resource.data.userId == request.auth.uid);
+    }
+  }
+}

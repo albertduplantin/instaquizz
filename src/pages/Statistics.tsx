@@ -1,21 +1,36 @@
 import { useState, useEffect } from 'react'
-import { BarChart3, Copy, RotateCcw, Download, Users, Filter } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
+import { BarChart3, Copy, RotateCcw, Download, Users, Filter, TrendingUp, Award, Target } from 'lucide-react'
+import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
+import { classService, studentService, quizResultService } from '../lib/supabaseServices'
+import { limitsService } from '../lib/subscriptionService'
+import { interrogationService, type WeightedStudent } from '../lib/interrogationService'
 import type { Class, StudentStats } from '../types'
 
 export function Statistics() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const [classes, setClasses] = useState<Class[]>([])
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
   const [studentStats, setStudentStats] = useState<StudentStats[]>([])
+  const [weightedStudents, setWeightedStudents] = useState<WeightedStudent[]>([])
   const [loading, setLoading] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
   const [showAllClasses, setShowAllClasses] = useState(false)
+  const [userLimits, setUserLimits] = useState<any>(null)
+  const [advancedStats, setAdvancedStats] = useState({
+    totalQuizzes: 0,
+    averageScore: 0,
+    bestStudent: '',
+    worstStudent: '',
+    improvementRate: 0,
+    participationRate: 0
+  })
+  const [editingStudent, setEditingStudent] = useState<string | null>(null)
+  const [editValues, setEditValues] = useState({ total_questions: 0, correct_answers: 0 })
 
   useEffect(() => {
     if (user) {
       loadClasses()
+      loadUserLimits()
     }
   }, [user])
 
@@ -30,18 +45,24 @@ export function Statistics() {
   }, [selectedClass, showAllClasses])
 
   const loadClasses = async () => {
-    if (!user) return
+    if (!user?.id) return
 
-    const { data, error } = await supabase
-      .from('classes')
-      .select('*')
-      .eq('teacher_id', user.id)
-      .order('name')
-
-    if (error) {
+    try {
+      const data = await classService.getByTeacher(user.id)
+      setClasses(data)
+    } catch (error) {
       console.error('Erreur:', error)
-    } else {
-      setClasses(data || [])
+    }
+  }
+
+  const loadUserLimits = async () => {
+    if (!user?.id) return
+
+    try {
+      const limits = await limitsService.getUserLimits(user.id)
+      setUserLimits(limits)
+    } catch (error) {
+      console.error('Erreur lors du chargement des limites:', error)
     }
   }
 
@@ -49,33 +70,26 @@ export function Statistics() {
     setLoading(true)
     
     try {
-      // Récupérer les stats des élèves avec leurs résultats de quiz
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select(`
-          id,
-          name,
-          quiz_results (
-            is_correct,
-            created_at
-          )
-        `)
-        .eq('class_id', classId)
-        .order('name')
+      // Récupérer les élèves de la classe
+      const students = await studentService.getByClass(classId)
+      
+      // Charger les statistiques d'interrogation
+      const weightedData = await interrogationService.getStudentsWithInterrogationStats(classId, students)
+      setWeightedStudents(weightedData)
+      
+      // Récupérer tous les résultats de quiz pour cette classe
+      const allResults = await quizResultService.getByTeacher(user?.id || '')
+      const classResults = allResults.filter(result => result.class_id === classId)
 
-      if (studentsError) {
-        console.error('Erreur students:', studentsError)
-        return
-      }
-
-      const stats: StudentStats[] = studentsData.map(student => {
-        const results = student.quiz_results || []
-        const totalQuestions = results.length
-        const correctAnswers = results.filter(r => r.is_correct).length
+      const stats: StudentStats[] = students.map(student => {
+        // Calculer les stats pour cet élève
+        const studentResults = classResults.filter(result => result.student_id === student.id)
+        const totalQuestions = studentResults.reduce((sum, result) => sum + result.total_questions, 0)
+        const correctAnswers = studentResults.reduce((sum, result) => sum + result.score, 0)
         const average = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 20 : 0
 
         return {
-          id: student.id,
+          id: student.id!,
           name: student.name,
           total_questions: totalQuestions,
           correct_answers: correctAnswers,
@@ -84,6 +98,7 @@ export function Statistics() {
       })
 
       setStudentStats(stats)
+      calculateAdvancedStats(stats)
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques:', error)
     } finally {
@@ -91,50 +106,91 @@ export function Statistics() {
     }
   }
 
+  const calculateAdvancedStats = (stats: StudentStats[]) => {
+    if (stats.length === 0) {
+      setAdvancedStats({
+        totalQuizzes: 0,
+        averageScore: 0,
+        bestStudent: '',
+        worstStudent: '',
+        improvementRate: 0,
+        participationRate: 0
+      })
+      return
+    }
+
+    const totalQuizzes = stats.reduce((sum, student) => sum + student.total_questions, 0)
+    const averageScore = stats.reduce((sum, student) => sum + student.average, 0) / stats.length
+    
+    const bestStudent = stats.reduce((best, current) => 
+      current.average > best.average ? current : best
+    )
+    
+    const worstStudent = stats.reduce((worst, current) => 
+      current.average < worst.average ? current : worst
+    )
+
+    // Calcul du taux de participation (étudiants ayant au moins 1 quiz)
+    const participatingStudents = stats.filter(student => student.total_questions > 0).length
+    const participationRate = (participatingStudents / stats.length) * 100
+
+    // Calcul du taux d'amélioration (simulation basée sur la variance des scores)
+    const scores = stats.map(student => student.average)
+    const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length
+    const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length
+    const improvementRate = Math.max(0, 100 - (variance / 4)) // Plus la variance est faible, plus l'amélioration est élevée
+
+    setAdvancedStats({
+      totalQuizzes,
+      averageScore: Math.round(averageScore * 100) / 100,
+      bestStudent: bestStudent.name,
+      worstStudent: worstStudent.name,
+      improvementRate: Math.round(improvementRate),
+      participationRate: Math.round(participationRate)
+    })
+  }
+
   const loadAllStudentStats = async () => {
     setLoading(true)
     
     try {
-      // Récupérer les stats de tous les élèves de toutes les classes
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select(`
-          id,
-          name,
-          class_id,
-          classes!inner (
-            name,
-            teacher_id
-          ),
-          quiz_results (
-            is_correct,
-            created_at
-          )
-        `)
-        .eq('classes.teacher_id', user?.id)
-        .order('name')
+      // Récupérer toutes les classes du professeur
+      const allClasses = await classService.getByTeacher(user?.id || '')
+      
+      // Récupérer tous les résultats de quiz
+      const allResults = await quizResultService.getByTeacher(user?.id || '')
 
-      if (studentsError) {
-        console.error('Erreur students:', studentsError)
-        return
+      const stats: StudentStats[] = []
+      const allWeightedStudents: WeightedStudent[] = []
+      
+      // Pour chaque classe, récupérer les élèves et calculer leurs stats
+      for (const classItem of allClasses) {
+        const students = await studentService.getByClass(classItem.id!)
+        const classResults = allResults.filter(result => result.class_id === classItem.id)
+
+        // Charger les statistiques d'interrogation pour cette classe
+        const weightedData = await interrogationService.getStudentsWithInterrogationStats(classItem.id!, students)
+        allWeightedStudents.push(...weightedData)
+
+        for (const student of students) {
+          const studentResults = classResults.filter(result => result.student_id === student.id)
+          const totalQuestions = studentResults.reduce((sum, result) => sum + result.total_questions, 0)
+          const correctAnswers = studentResults.reduce((sum, result) => sum + result.score, 0)
+          const average = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 20 : 0
+
+          stats.push({
+            id: student.id!,
+            name: `${student.name} (${classItem.name})`,
+            total_questions: totalQuestions,
+            correct_answers: correctAnswers,
+            average: Math.round(average * 100) / 100
+          })
+        }
       }
 
-             const stats: StudentStats[] = studentsData.map((student: any) => {
-         const results = student.quiz_results || []
-         const totalQuestions = results.length
-         const correctAnswers = results.filter((r: any) => r.is_correct).length
-         const average = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 20 : 0
-
-         return {
-           id: student.id,
-           name: `${student.name} (${student.classes?.name || 'Classe inconnue'})`,
-           total_questions: totalQuestions,
-           correct_answers: correctAnswers,
-           average: Math.round(average * 100) / 100
-         }
-       })
-
       setStudentStats(stats)
+      setWeightedStudents(allWeightedStudents)
+      calculateAdvancedStats(stats)
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques:', error)
     } finally {
@@ -152,20 +208,18 @@ export function Statistics() {
     setLoading(true)
     
     try {
-      // Supprimer tous les résultats de quiz pour cette classe
-      const { error } = await supabase
-        .from('quiz_results')
-        .delete()
-        .in('student_id', studentStats.map(s => s.id))
+      // Récupérer tous les résultats de quiz pour cette classe
+      const allResults = await quizResultService.getByTeacher(user?.id || '')
+      const classResults = allResults.filter(result => result.class_id === selectedClass.id)
+      
+      // Supprimer chaque résultat individuellement
+      for (const result of classResults) {
+        await quizResultService.delete(result.id!)
+      }
 
-      if (error) {
-        console.error('Erreur:', error)
-        alert('Erreur lors de la réinitialisation')
-      } else {
-        alert('Statistiques réinitialisées avec succès')
-        if (selectedClass) {
-          loadStudentStats(selectedClass.id)
-        }
+      alert('Statistiques réinitialisées avec succès')
+      if (selectedClass) {
+        loadStudentStats(selectedClass.id)
       }
     } catch (error) {
       console.error('Erreur:', error)
@@ -183,19 +237,16 @@ export function Statistics() {
     setLoading(true)
     
     try {
-      // Supprimer tous les résultats de quiz du professeur
-      const { error } = await supabase
-        .from('quiz_results')
-        .delete()
-        .in('student_id', studentStats.map(s => s.id))
-
-      if (error) {
-        console.error('Erreur:', error)
-        alert('Erreur lors de la réinitialisation')
-      } else {
-        alert('Toutes les statistiques réinitialisées avec succès')
-        loadAllStudentStats()
+      // Récupérer tous les résultats de quiz du professeur
+      const allResults = await quizResultService.getByTeacher(user?.id || '')
+      
+      // Supprimer chaque résultat individuellement
+      for (const result of allResults) {
+        await quizResultService.delete(result.id!)
       }
+
+      alert('Toutes les statistiques réinitialisées avec succès')
+      loadAllStudentStats()
     } catch (error) {
       console.error('Erreur:', error)
       alert('Erreur lors de la réinitialisation')
@@ -271,11 +322,85 @@ export function Statistics() {
     setShowAllClasses(true)
   }
 
+  const startEditStudent = (student: StudentStats) => {
+    setEditingStudent(student.id)
+    setEditValues({
+      total_questions: student.total_questions,
+      correct_answers: student.correct_answers
+    })
+  }
+
+  const cancelEdit = () => {
+    setEditingStudent(null)
+    setEditValues({ total_questions: 0, correct_answers: 0 })
+  }
+
+  const saveEdit = async () => {
+    if (!editingStudent || !user?.id) return
+
+    setLoading(true)
+    try {
+      // Trouver la classe de l'élève
+      let classId = selectedClass?.id
+      if (!classId && showAllClasses) {
+        for (const classItem of classes) {
+          const classStudents = await studentService.getByClass(classItem.id!)
+          if (classStudents.find(s => s.id === editingStudent)) {
+            classId = classItem.id
+            break
+          }
+        }
+      }
+
+      if (!classId) {
+        alert('Impossible de trouver la classe de l\'élève')
+        return
+      }
+
+      // Récupérer tous les résultats existants pour cet élève
+      const allResults = await quizResultService.getByTeacher(user.id)
+      const studentResults = allResults.filter(result => 
+        result.student_id === editingStudent && result.class_id === classId
+      )
+
+      // Supprimer les anciens résultats
+      for (const result of studentResults) {
+        await quizResultService.delete(result.id!)
+      }
+
+      // Créer un nouveau résultat avec les valeurs éditées
+      if (editValues.total_questions > 0) {
+        await quizResultService.create({
+          student_id: editingStudent,
+          question_id: '', // Pas de question spécifique pour l'édition manuelle
+          is_correct: editValues.correct_answers === editValues.total_questions
+        })
+      }
+
+      // Recharger les statistiques
+      if (selectedClass) {
+        loadStudentStats(selectedClass.id)
+      } else if (showAllClasses) {
+        loadAllStudentStats()
+      }
+
+      setEditingStudent(null)
+      setEditValues({ total_questions: 0, correct_answers: 0 })
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde:', error)
+      alert('Erreur lors de la sauvegarde')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Les interrogations instantanées sont désormais réalisées depuis la page Quiz
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Statistiques</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Résultats</h1>
           {selectedClass && (
             <p className="text-gray-600">Classe : {selectedClass.name}</p>
           )}
@@ -416,6 +541,51 @@ export function Statistics() {
         </div>
       )}
 
+      {/* Statistiques avancées (Pro et Premium) */}
+      {(selectedClass || showAllClasses) && userLimits && (userLimits.maxClasses > 3 || userLimits.maxStorageGB > 0.5) && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="h-5 w-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Statistiques Avancées</h3>
+            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Pro/Premium</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Award className="h-5 w-5 text-yellow-500" />
+              </div>
+              <div className="text-xl font-bold text-gray-900">{advancedStats.bestStudent || 'N/A'}</div>
+              <div className="text-sm text-gray-600">Meilleur élève</div>
+            </div>
+            
+            <div className="bg-white rounded-lg p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Target className="h-5 w-5 text-red-500" />
+              </div>
+              <div className="text-xl font-bold text-gray-900">{advancedStats.worstStudent || 'N/A'}</div>
+              <div className="text-sm text-gray-600">À améliorer</div>
+            </div>
+            
+            <div className="bg-white rounded-lg p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <TrendingUp className="h-5 w-5 text-green-500" />
+              </div>
+              <div className="text-xl font-bold text-gray-900">{advancedStats.improvementRate}%</div>
+              <div className="text-sm text-gray-600">Taux d'amélioration</div>
+            </div>
+            
+            <div className="bg-white rounded-lg p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <Users className="h-5 w-5 text-blue-500" />
+              </div>
+              <div className="text-xl font-bold text-gray-900">{advancedStats.participationRate}%</div>
+              <div className="text-sm text-gray-600">Participation</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tableau des résultats */}
       {(selectedClass || showAllClasses) && (
         <div className="card">
@@ -452,57 +622,129 @@ export function Statistics() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Moyenne /20
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Interrogations
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {studentStats
                     .sort((a, b) => b.average - a.average)
-                    .map((student, index) => (
-                      <tr key={student.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="text-sm font-medium text-gray-900">
-                              {student.name}
+                    .map((student, index) => {
+                      const weightedStudent = weightedStudents.find(ws => ws.id === student.id)
+                      return (
+                        <tr key={student.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className={`w-2 h-2 rounded-full mr-3 ${
+                                (weightedStudent?.interrogation_count || 0) === 0 ? 'bg-red-500' :
+                                (weightedStudent?.interrogation_count || 0) <= 2 ? 'bg-yellow-500' :
+                                'bg-green-500'
+                              }`}></div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {student.name}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {student.total_questions}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {student.correct_answers}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                              <div
-                                className="bg-blue-600 h-2 rounded-full"
-                                style={{ 
-                                  width: `${student.total_questions > 0 
-                                    ? (student.correct_answers / student.total_questions) * 100 
-                                    : 0}%` 
-                                }}
-                              ></div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {editingStudent === student.id ? (
+                              <input
+                                type="number"
+                                min="0"
+                                value={editValues.total_questions}
+                                onChange={(e) => setEditValues(prev => ({ ...prev, total_questions: parseInt(e.target.value) || 0 }))}
+                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            ) : (
+                              student.total_questions
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {editingStudent === student.id ? (
+                              <input
+                                type="number"
+                                min="0"
+                                max={editValues.total_questions}
+                                value={editValues.correct_answers}
+                                onChange={(e) => setEditValues(prev => ({ ...prev, correct_answers: parseInt(e.target.value) || 0 }))}
+                                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                            ) : (
+                              student.correct_answers
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                <div
+                                  className="bg-blue-600 h-2 rounded-full"
+                                  style={{ 
+                                    width: `${student.total_questions > 0 
+                                      ? (student.correct_answers / student.total_questions) * 100 
+                                      : 0}%` 
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="text-sm text-gray-600">
+                                {student.total_questions > 0 
+                                  ? Math.round((student.correct_answers / student.total_questions) * 100)
+                                  : 0}%
+                              </span>
                             </div>
-                            <span className="text-sm text-gray-600">
-                              {student.total_questions > 0 
-                                ? Math.round((student.correct_answers / student.total_questions) * 100)
-                                : 0}%
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              student.average >= 16 ? 'bg-green-100 text-green-800' :
+                              student.average >= 12 ? 'bg-yellow-100 text-yellow-800' :
+                              student.average >= 8 ? 'bg-orange-100 text-orange-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {student.average}/20
                             </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            student.average >= 16 ? 'bg-green-100 text-green-800' :
-                            student.average >= 12 ? 'bg-yellow-100 text-yellow-800' :
-                            student.average >= 8 ? 'bg-orange-100 text-orange-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {student.average}/20
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {weightedStudent?.interrogation_count || 0}
+                            </div>
+                            {weightedStudent?.last_interrogated && (
+                              <div className="text-xs text-gray-500">
+                                il y a {Math.floor((new Date().getTime() - weightedStudent.last_interrogated.getTime()) / (1000 * 60 * 60 * 24))}j
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {editingStudent === student.id ? (
+                              <div className="flex space-x-2">
+                                <button
+                                  onClick={saveEdit}
+                                  className="text-green-600 hover:text-green-800 text-sm font-medium"
+                                  disabled={loading}
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  onClick={cancelEdit}
+                                  className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => startEditStudent(student)}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                disabled={loading}
+                              >
+                                Modifier
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                 </tbody>
               </table>
             )}

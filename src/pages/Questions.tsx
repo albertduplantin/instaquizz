@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Edit2, Trash2, Search, BookOpen, Users, Upload, FileText, Download } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { useAuth } from '../hooks/useAuth'
+import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
+import { classService, questionService } from '../lib/supabaseServices'
+import { limitsService } from '../lib/subscriptionService'
 import { ImageUpload } from '../components/ImageUpload'
-import { DebugStorage } from '../components/DebugStorage'
-import type { Question, Class } from '../types'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Tooltip } from '../components/Tooltip'
+import { QuestionLinks } from '../components/QuestionLinks'
+import { RichTextEditor } from '../components/RichTextEditor'
+import { FormattedText } from '../components/FormattedText'
+import { useToastContext } from '../contexts/ToastContext'
+import type { Question, Class, QuestionLink } from '../types'
 
 export function Questions() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
+  const { showSuccess, showError, showWarning, showInfo } = useToastContext()
   const [classes, setClasses] = useState<Class[]>([])
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -22,8 +29,23 @@ export function Questions() {
   const [formData, setFormData] = useState({
     content: '',
     image_url: '',
-    image_alt: ''
+    image_alt: '',
+    links: [] as QuestionLink[]
   })
+  const [showLimitAlert, setShowLimitAlert] = useState(false)
+  const [limitAlertData, setLimitAlertData] = useState<{
+    limitType: 'classes' | 'students' | 'questions'
+    currentCount: number
+    maxCount: number
+    planName: string
+  } | null>(null)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<{ url: string; alt: string } | null>(null)
+  
+  // États pour les confirmations
+  const [confirmDelete, setConfirmDelete] = useState<{ show: boolean; questionId: string | null }>({ show: false, questionId: null })
 
   useEffect(() => {
     if (user) {
@@ -38,6 +60,31 @@ export function Questions() {
       setQuestions([])
     }
   }, [selectedClass])
+
+  // Fonctions de gestion des alertes
+  const handleLimitAlert = (limitCheck: any) => {
+    if (limitCheck.limitType && limitCheck.currentCount && limitCheck.maxCount && limitCheck.planName) {
+      setLimitAlertData({
+        limitType: limitCheck.limitType,
+        currentCount: limitCheck.currentCount,
+        maxCount: limitCheck.maxCount,
+        planName: limitCheck.planName
+      })
+      setShowLimitAlert(true)
+    }
+  }
+
+  const handleCloseLimitAlert = () => {
+    setShowLimitAlert(false)
+    setLimitAlertData(null)
+  }
+
+  const handleUpgrade = () => {
+    setShowLimitAlert(false)
+    setLimitAlertData(null)
+    // Redirection vers la page d'abonnement
+    window.location.href = '/#subscription'
+  }
 
   // Fermer le menu d'export quand on clique ailleurs
   useEffect(() => {
@@ -58,13 +105,10 @@ export function Questions() {
 
   const fetchClasses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('classes')
-        .select('*')
-        .order('name')
-
-      if (error) throw error
-      setClasses(data || [])
+      if (!user?.id) return
+      
+      const data = await classService.getByTeacher(user.id)
+      setClasses(data)
     } catch (error) {
       console.error('Erreur lors du chargement des classes:', error)
     } finally {
@@ -77,14 +121,8 @@ export function Questions() {
 
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('class_id', selectedClass.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setQuestions(data || [])
+      const data = await questionService.getByClass(selectedClass.id!)
+      setQuestions(data)
     } catch (error) {
       console.error('Erreur lors du chargement des questions:', error)
     } finally {
@@ -94,38 +132,57 @@ export function Questions() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedClass || !formData.content.trim()) return
+    if (!selectedClass || !formData.content.trim() || !user?.id) return
 
     try {
-      if (editingQuestion) {
-        const { error } = await supabase
-          .from('questions')
-          .update({
-            content: formData.content,
-            image_url: formData.image_url || null,
-            image_alt: formData.image_alt || null,
-          })
-          .eq('id', editingQuestion.id)
-
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('questions')
-          .insert([
-            {
-              content: formData.content,
-              class_id: selectedClass.id,
-              teacher_id: user?.id,
-              image_url: formData.image_url || null,
-              image_alt: formData.image_alt || null,
-            },
-          ])
-
-        if (error) throw error
+      // Vérifier les limites avant d'ajouter une question (seulement pour les nouvelles questions)
+      if (!editingQuestion) {
+        const canAdd = await limitsService.canAddQuestion(user.id, selectedClass.id!, questions.length)
+        
+        if (!canAdd.allowed) {
+          handleLimitAlert(canAdd)
+          return
+        }
       }
 
-      setFormData({ content: '', image_url: '', image_alt: '' })
+      if (editingQuestion) {
+        const updateData: any = {
+          content: formData.content,
+        }
+        if (formData.image_url) {
+          updateData.image_url = formData.image_url
+        }
+        if (formData.image_alt) {
+          updateData.image_alt = formData.image_alt
+        }
+        if (formData.links && formData.links.length > 0) {
+          updateData.links = formData.links
+        } else {
+          updateData.links = []
+        }
+        await questionService.update(editingQuestion.id!, updateData)
+      } else {
+        const createData: any = {
+          content: formData.content,
+          class_id: selectedClass.id!,
+          teacher_id: user.id,
+          created_at: new Date(),
+        }
+        if (formData.image_url) {
+          createData.image_url = formData.image_url
+        }
+        if (formData.image_alt) {
+          createData.image_alt = formData.image_alt
+        }
+        if (formData.links && formData.links.length > 0) {
+          createData.links = formData.links
+        }
+        await questionService.create(createData)
+      }
+
+      setFormData({ content: '', image_url: '', image_alt: '', links: [] })
       setShowForm(false)
+      setShowEditModal(false)
       setEditingQuestion(null)
       fetchQuestions()
     } catch (error) {
@@ -135,33 +192,67 @@ export function Questions() {
 
   const handleEdit = (question: Question) => {
     setEditingQuestion(question)
-    setFormData({ 
+    setFormData({
       content: question.content,
       image_url: question.image_url || '',
-      image_alt: question.image_alt || ''
+      image_alt: question.image_alt || '',
+      links: question.links || []
     })
-    setShowForm(true)
+    setShowEditModal(true)
   }
 
-  const handleDelete = async (questionId: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette question ?')) return
+  const handleDelete = (questionId: string) => {
+    setConfirmDelete({ show: true, questionId })
+  }
 
+  const confirmDeleteQuestion = async () => {
+    if (!confirmDelete.questionId) return
+    
     try {
-      const { error } = await supabase
-        .from('questions')
-        .delete()
-        .eq('id', questionId)
-
-      if (error) throw error
-      fetchQuestions()
+      await questionService.delete(confirmDelete.questionId)
+      await fetchQuestions()
+      showSuccess('Question supprimée', 'La question a été supprimée avec succès.')
     } catch (error) {
       console.error('Erreur lors de la suppression:', error)
+      showError('Erreur lors de la suppression', 'Une erreur est survenue lors de la suppression de la question.')
+    } finally {
+      setConfirmDelete({ show: false, questionId: null })
     }
+  }
+
+  const handleResetAllQuestions = () => {
+    setShowResetConfirm(true)
+  }
+
+  const confirmResetAllQuestions = async () => {
+    if (!selectedClass || !user?.id) return
+
+    try {
+      // Supprimer toutes les questions de la classe
+      for (const question of questions) {
+        await questionService.delete(question.id!)
+      }
+      
+      await fetchQuestions()
+      showSuccess(`${questions.length} question(s) supprimée(s) avec succès`)
+      setShowResetConfirm(false)
+    } catch (error) {
+      console.error('Erreur lors de la suppression:', error)
+      showError('Erreur lors de la suppression', 'Une erreur est survenue lors de la suppression des questions.')
+    }
+  }
+
+  const handleImageClick = (imageUrl: string, imageAlt: string) => {
+    setSelectedImage({ url: imageUrl, alt: imageAlt })
+    setShowImageModal(true)
   }
 
   const handleImportQuestions = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedClass || !importQuestionsText.trim() || !user) return
+    
+    if (!selectedClass || !importQuestionsText.trim() || !user?.id) {
+      return
+    }
 
     setLoading(true)
     try {
@@ -171,8 +262,10 @@ export function Questions() {
         .map(content => content.trim())
         .filter(content => content.length > 0)
 
+      console.log('📝 QUESTIONS PARSÉES:', newQuestionContents.length)
+
       if (newQuestionContents.length === 0) {
-        alert('Aucune question valide trouvée')
+        showWarning('Aucune question valide', 'Veuillez saisir au moins une question valide.')
         setLoading(false)
         return
       }
@@ -183,40 +276,109 @@ export function Questions() {
         !existingContents.includes(content.toLowerCase())
       )
 
+      console.log('🔍 DOUBLONS:', {
+        existing: existingContents.length,
+        unique: uniqueContents.length,
+        duplicates: newQuestionContents.length - uniqueContents.length
+      })
+
       if (uniqueContents.length === 0) {
-        alert('Toutes les questions sont déjà présentes dans la classe')
+        showInfo('Questions déjà présentes', 'Toutes les questions sont déjà présentes dans cette classe.')
         setLoading(false)
         return
       }
 
+      // Vérifier les limites avant d'ajouter les questions
+      
+      let canAdd
+      try {
+        canAdd = await limitsService.canAddQuestion(user.id, selectedClass.id!, questions.length)
+      } catch (error) {
+        console.error('❌ ERREUR LIMITES:', error)
+        throw error
+      }
+      
+      if (!canAdd.allowed) {
+        handleLimitAlert(canAdd)
+        setLoading(false)
+        return
+      }
+
+      // Vérifier si on peut ajouter toutes les questions
+      
+      if (questions.length + uniqueContents.length > (canAdd.maxCount || 0)) {
+        const remainingSlots = (canAdd.maxCount || 0) - questions.length
+        if (remainingSlots > 0) {
+          const limitedContents = uniqueContents.slice(0, remainingSlots)
+          const questionsToInsert = limitedContents.map(content => ({
+            content,
+            class_id: selectedClass.id!,
+            teacher_id: user.id,
+            created_at: new Date(),
+            // Ne pas inclure image_url et image_alt si pas d'image
+          }))
+          
+          // Créer les questions limitées
+          for (const questionData of questionsToInsert) {
+            await questionService.create(questionData)
+          }
+          
+          await fetchQuestions()
+          showSuccess(
+            `${limitedContents.length} question(s) ajoutée(s)`, 
+            'Limite de questions atteinte pour votre plan.'
+          )
+          setImportQuestionsText('')
+          setShowImportQuestions(false)
+          setLoading(false)
+          return
+        } else {
+          handleLimitAlert(canAdd)
+          setLoading(false)
+          return
+        }
+      }
+
+      
       // Insérer les nouvelles questions
       const questionsToInsert = uniqueContents.map(content => ({
         content,
-        class_id: selectedClass.id,
-        teacher_id: user.id
+        class_id: selectedClass.id!,
+        teacher_id: user.id,
+        created_at: new Date(),
+        // Ne pas inclure image_url et image_alt si pas d'image
       }))
 
-      const { error } = await supabase
-        .from('questions')
-        .insert(questionsToInsert)
 
-      if (error) throw error
+      // Créer les questions une par une
+      for (let i = 0; i < questionsToInsert.length; i++) {
+        const questionData = questionsToInsert[i]
+        try {
+          await questionService.create(questionData)
+        } catch (error) {
+          console.error(`❌ Erreur question ${i + 1}:`, error)
+          throw error
+        }
+      }
 
       // Rafraîchir la liste
       await fetchQuestions()
       
       const duplicates = newQuestionContents.length - uniqueContents.length
-      let message = `${uniqueContents.length} question(s) ajoutée(s) avec succès`
       if (duplicates > 0) {
-        message += `\n${duplicates} doublon(s) ignoré(s)`
+        showSuccess(
+          `${uniqueContents.length} question(s) ajoutée(s) avec succès`,
+          `${duplicates} doublon(s) ignoré(s)`
+        )
+      } else {
+        showSuccess(`${uniqueContents.length} question(s) ajoutée(s) avec succès`)
       }
-      alert(message)
 
       setImportQuestionsText('')
       setShowImportQuestions(false)
     } catch (error) {
       console.error('Erreur lors de l\'import:', error)
-      alert('Erreur lors de l\'import des questions')
+      showError('Erreur lors de l\'import', 'Une erreur est survenue lors de l\'import des questions. Veuillez réessayer.')
     } finally {
       setLoading(false)
     }
@@ -325,9 +487,6 @@ export function Questions() {
   if (!selectedClass) {
     return (
       <div className="space-y-6">
-        {/* Debug Storage */}
-        <DebugStorage />
-        
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center gap-3 mb-6">
             <BookOpen className="h-6 w-6 text-blue-600" />
@@ -371,9 +530,6 @@ export function Questions() {
 
   return (
     <div className="space-y-6">
-      {/* Debug Storage */}
-      <DebugStorage />
-      
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -383,6 +539,8 @@ export function Questions() {
               <p className="text-gray-600">Gérez les questions pour cette classe</p>
             </div>
           </div>
+
+
           <button
             onClick={() => setSelectedClass(null)}
             className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -448,17 +606,32 @@ export function Questions() {
                 )}
               </div>
             )}
-            <button
-              onClick={() => {
-                setShowForm(true)
-                setEditingQuestion(null)
-                setFormData({ content: '', image_url: '', image_alt: '' })
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 min-w-[140px] justify-center"
-            >
-              <Plus className="h-4 w-4" />
-              Nouvelle question
-            </button>
+            <div className="flex gap-2">
+              <Tooltip content="Ajouter une nouvelle question à cette classe">
+                <button
+                  onClick={() => {
+                    setShowForm(true)
+                    setEditingQuestion(null)
+                    setFormData({ content: '', image_url: '', image_alt: '', links: [] })
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 min-w-[140px] justify-center"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nouvelle question
+                </button>
+              </Tooltip>
+              {questions.length > 0 && (
+                <Tooltip content="Supprimer toutes les questions de cette classe">
+                  <button
+                    onClick={() => setShowResetConfirm(true)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 min-w-[140px] justify-center"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Réinitialiser
+                  </button>
+                </Tooltip>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -493,6 +666,7 @@ export function Questions() {
                 onImageRemoved={handleImageRemoved}
                 currentImageUrl={formData.image_url}
                 currentImageAlt={formData.image_alt}
+                onStorageLimitReached={handleLimitAlert}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Ajoutez une image pour illustrer votre question (PNG, JPG, GIF jusqu'à 5MB)
@@ -510,7 +684,7 @@ export function Questions() {
                 onClick={() => {
                   setShowForm(false)
                   setEditingQuestion(null)
-                  setFormData({ content: '', image_url: '', image_alt: '' })
+                  setFormData({ content: '', image_url: '', image_alt: '', links: [] })
                 }}
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
               >
@@ -558,14 +732,26 @@ export function Questions() {
                       <img
                         src={question.image_url}
                         alt={question.image_alt || 'Image de la question'}
-                        className="max-w-full max-h-48 object-contain rounded-lg border border-gray-200 shadow-sm"
+                        className="max-w-full max-h-48 object-contain rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => handleImageClick(question.image_url!, question.image_alt || 'Image de la question')}
+                        title="Cliquer pour agrandir"
                       />
                     </div>
                   )}
-                  <p className="text-gray-900 leading-relaxed">{question.content}</p>
+                  <div className="text-gray-900 leading-relaxed">
+                    <FormattedText text={question.content} />
+                  </div>
                 </div>
                 <p className="text-sm text-gray-500 mt-2">
-                  Créée le {new Date(question.created_at).toLocaleDateString('fr-FR')}
+                  Créée le {(() => {
+                    try {
+                      // Gérer les timestamps Firestore et les dates JavaScript
+                      const date = (question.created_at as any)?.toDate ? (question.created_at as any).toDate() : new Date(question.created_at)
+                      return date.toLocaleDateString('fr-FR')
+                    } catch {
+                      return 'Date inconnue'
+                    }
+                  })()}
                 </p>
               </div>
                   <div className="flex items-center gap-2 ml-4">
@@ -590,6 +776,139 @@ export function Questions() {
           </div>
         )}
       </div>
+
+      {/* Modal Édition Question */}
+      {showEditModal && editingQuestion && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">
+              Modifier la question
+            </h3>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-1">
+                  Contenu de la question *
+                </label>
+                <RichTextEditor
+                  value={formData.content}
+                  onChange={(content) => setFormData({ ...formData, content })}
+                  placeholder="Tapez votre question ici... Vous pouvez utiliser des liens, du gras et de l'italique."
+                  rows={4}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Image (optionnel)
+                </label>
+                <ImageUpload
+                  onImageUploaded={(imageUrl, imageAlt) => {
+                    setFormData({ ...formData, image_url: imageUrl, image_alt: imageAlt })
+                  }}
+                  onImageRemoved={() => {
+                    setFormData({ ...formData, image_url: '', image_alt: '' })
+                  }}
+                  currentImageUrl={formData.image_url}
+                  currentImageAlt={formData.image_alt}
+                  onStorageLimitReached={(limitData) => {
+                    setLimitAlertData(limitData)
+                    setShowLimitAlert(true)
+                  }}
+                />
+              </div>
+
+              <div>
+                <QuestionLinks
+                  links={formData.links}
+                  onLinksChange={(links) => setFormData({ ...formData, links })}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setEditingQuestion(null)
+                    setFormData({ content: '', image_url: '', image_alt: '', links: [] })
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Sauvegarder
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Agrandissement d'image */}
+      {showImageModal && selectedImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowImageModal(false)}
+        >
+          <div 
+            className="relative max-w-4xl max-h-[90vh] w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 text-white rounded-full p-2 hover:bg-opacity-75 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={selectedImage.url}
+              alt={selectedImage.alt}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            />
+            {selectedImage.alt && (
+              <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-4 rounded-b-lg">
+                <p className="text-sm">{selectedImage.alt}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmation Réinitialisation */}
+      {showResetConfirm && selectedClass && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4 text-red-600">
+              ⚠️ Réinitialiser toutes les questions
+            </h3>
+            <p className="text-gray-700 mb-6">
+              Êtes-vous sûr de vouloir supprimer <strong>toutes les {questions.length} questions</strong> de la classe <strong>"{selectedClass.name}"</strong> ?
+              <br /><br />
+              <span className="text-red-600 font-medium">Cette action est irréversible !</span>
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleResetAllQuestions}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Supprimer tout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Import questions */}
       {showImportQuestions && selectedClass && (
@@ -633,15 +952,19 @@ export function Questions() {
                   <label htmlFor="importQuestionsText" className="block text-sm font-medium text-gray-700 mb-1">
                     Collez la liste des questions (une question par ligne)
                   </label>
-                  <textarea
-                    id="importQuestionsText"
-                    rows={8}
-                    value={importQuestionsText}
-                    onChange={(e) => setImportQuestionsText(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Quelle est la capitale de la France ?&#10;Combien y a-t-il de continents ?&#10;Qui a écrit Les Misérables ?&#10;..."
-                    required
-                  />
+                  <div className="space-y-2">
+                    <textarea
+                      id="importQuestionsText"
+                      rows={8}
+                      value={importQuestionsText}
+                      onChange={(e) => setImportQuestionsText(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Quelle est la capitale de la France ?&#10;Combien y a-t-il de continents ?&#10;Qui a écrit Les Misérables ?&#10;..."
+                      required
+                    />
+                    <div className="flex justify-end">
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -705,6 +1028,58 @@ export function Questions() {
           </div>
         </div>
       )}
+
+      {/* Alerte de limite */}
+      {showLimitAlert && limitAlertData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Limite atteinte
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Vous avez atteint la limite de {limitAlertData.maxCount} {limitAlertData.limitType} avec votre plan {limitAlertData.planName}.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleUpgrade}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Améliorer le plan
+              </button>
+              <button
+                onClick={handleCloseLimitAlert}
+                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation de suppression d'une question */}
+      <ConfirmDialog
+        isOpen={confirmDelete.show}
+        onClose={() => setConfirmDelete({ show: false, questionId: null })}
+        onConfirm={confirmDeleteQuestion}
+        title="Supprimer la question"
+        message="Êtes-vous sûr de vouloir supprimer cette question ? Cette action est irréversible."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        type="danger"
+      />
+
+      {/* Confirmation de reset de toutes les questions */}
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={confirmResetAllQuestions}
+        title="Supprimer toutes les questions"
+        message={`Êtes-vous sûr de vouloir supprimer toutes les questions de la classe "${selectedClass?.name}" ? Cette action est irréversible et supprimera ${questions.length} question(s).`}
+        confirmText="Tout supprimer"
+        cancelText="Annuler"
+        type="danger"
+      />
     </div>
   )
 } 
