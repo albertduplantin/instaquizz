@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Menu, X, Home, Users, HelpCircle, BarChart3, LogOut, Youtube, Shuffle, CreditCard, Crown, MessageCircle, Palette, BookOpen } from 'lucide-react'
+import { Menu, X, Home, Users, HelpCircle, BarChart3, LogOut, Youtube, Shuffle, CreditCard, Crown, MessageCircle, Palette, BookOpen, Wrench } from 'lucide-react'
 import { useFirebaseAuth } from '../hooks/useFirebaseAuth'
 import { adminService } from '../lib/adminService'
 import { ThemeSelector } from './ThemeSelector'
@@ -41,6 +41,7 @@ export function Layout({ children, currentPage, onPageChange }: LayoutProps) {
     { id: 'subscription', label: 'Abonnement', icon: CreditCard },
     { id: 'help', label: 'Centre d\'aide', icon: BookOpen },
     { id: 'support', label: 'Support', icon: MessageCircle },
+    { id: 'admin-tools', label: 'Outils Admin', icon: Wrench },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Crown }] : []),
   ]
 

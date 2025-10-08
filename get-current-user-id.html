@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Récupérer mon UID Firebase</title>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'
+    import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
+    import { getFirestore, collection, query, where, getDocs, writeBatch, doc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB7-oLur0acq5zF3zwm97nH7NmjHAtgT8A",
+      authDomain: "instaquizz-firebase.firebaseapp.com",
+      projectId: "instaquizz-firebase",
+      storageBucket: "instaquizz-firebase.firebasestorage.app",
+      messagingSenderId: "973474612549",
+      appId: "1:973474612549:web:292407d80d568e770d2a2c"
+    }
+
+    const app = initializeApp(firebaseConfig)
+    const auth = getAuth(app)
+    const db = getFirestore(app)
+
+    onAuthStateChanged(auth, async (user) => {
+      const output = document.getElementById('output')
+      
+      if (user) {
+        output.innerHTML = `
+          <div style="background: #10b981; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h2>✅ Connecté avec succès !</h2>
+            <p><strong>Email:</strong> ${user.email}</p>
+            <p><strong>Nom:</strong> ${user.displayName || 'Non défini'}</p>
+          </div>
+          
+          <div style="background: #3b82f6; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h2>🔑 Votre UID Firebase:</h2>
+            <input type="text" value="${user.uid}" readonly 
+              style="width: 100%; padding: 10px; font-size: 16px; font-family: monospace; border: 2px solid white; border-radius: 4px;">
+            <button onclick="navigator.clipboard.writeText('${user.uid}')" 
+              style="margin-top: 10px; padding: 10px 20px; background: white; color: #3b82f6; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+              📋 Copier l'UID
+            </button>
+          </div>
+          
+          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h2>📊 Statistiques</h2>
+            <div id="stats">Chargement...</div>
+          </div>
+          
+          <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h2>🔧 Réattribuer toutes les questions à votre compte</h2>
+            <p>Cliquez sur le bouton ci-dessous pour réattribuer toutes les questions à votre UID actuel.</p>
+            <button id="fixBtn" 
+              style="padding: 15px 30px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px;">
+              🔄 Réattribuer mes questions
+            </button>
+            <div id="fixResult" style="margin-top: 15px;"></div>
+          </div>
+          
+          <div style="background: #dbeafe; padding: 20px; border-radius: 8px;">
+            <h2>📥 Exporter les questions</h2>
+            <button id="exportBtn" 
+              style="padding: 15px 30px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px;">
+              💾 Exporter en TXT
+            </button>
+            <div id="exportResult" style="margin-top: 15px;"></div>
+          </div>
+        `
+        
+        // Récupérer les statistiques
+        await loadStats(user.uid)
+        
+        // Bouton de réattribution
+        document.getElementById('fixBtn').addEventListener('click', async () => {
+          await fixQuestions(user.uid)
+        })
+        
+        // Bouton d'export
+        document.getElementById('exportBtn').addEventListener('click', async () => {
+          await exportQuestions()
+        })
+        
+      } else {
+        output.innerHTML = `
+          <div style="background: #ef4444; color: white; padding: 20px; border-radius: 8px;">
+            <h2>❌ Non connecté</h2>
+            <p>Veuillez d'abord vous connecter sur <a href="https://instaquizz.vercel.app" style="color: white; text-decoration: underline;">InstaQuizz</a></p>
+          </div>
+        `
+      }
+    })
+    
+    async function loadStats(userId) {
+      const statsDiv = document.getElementById('stats')
+      try {
+        // Compter les questions
+        const questionsQuery = query(collection(db, 'questions'))
+        const questionsSnap = await getDocs(questionsQuery)
+        
+        const myQuestions = []
+        const otherQuestions = []
+        const questionsByTeacher = {}
+        
+        questionsSnap.forEach(doc => {
+          const data = doc.data()
+          if (data.teacher_id === userId) {
+            myQuestions.push({ id: doc.id, ...data })
+          } else {
+            otherQuestions.push({ id: doc.id, ...data })
+          }
+          
+          if (!questionsByTeacher[data.teacher_id]) {
+            questionsByTeacher[data.teacher_id] = []
+          }
+          questionsByTeacher[data.teacher_id].push({ id: doc.id, ...data })
+        })
+        
+        // Compter les classes
+        const classesQuery = query(collection(db, 'classes'))
+        const classesSnap = await getDocs(classesQuery)
+        
+        const myClasses = []
+        const otherClasses = []
+        
+        classesSnap.forEach(doc => {
+          const data = doc.data()
+          if (data.teacher_id === userId) {
+            myClasses.push({ id: doc.id, ...data })
+          } else {
+            otherClasses.push({ id: doc.id, ...data })
+          }
+        })
+        
+        let html = `
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 2px solid #10b981;">
+              <h3 style="color: #10b981; margin: 0 0 10px 0;">✅ Vos questions</h3>
+              <p style="font-size: 32px; font-weight: bold; margin: 0; color: #10b981;">${myQuestions.length}</p>
+            </div>
+            
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 2px solid ${otherQuestions.length > 0 ? '#ef4444' : '#d1d5db'};">
+              <h3 style="color: ${otherQuestions.length > 0 ? '#ef4444' : '#6b7280'}; margin: 0 0 10px 0;">⚠️ Questions orphelines</h3>
+              <p style="font-size: 32px; font-weight: bold; margin: 0; color: ${otherQuestions.length > 0 ? '#ef4444' : '#6b7280'};">${otherQuestions.length}</p>
+            </div>
+            
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 2px solid #10b981;">
+              <h3 style="color: #10b981; margin: 0 0 10px 0;">📚 Vos classes</h3>
+              <p style="font-size: 32px; font-weight: bold; margin: 0; color: #10b981;">${myClasses.length}</p>
+            </div>
+            
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 2px solid ${otherClasses.length > 0 ? '#ef4444' : '#d1d5db'};">
+              <h3 style="color: ${otherClasses.length > 0 ? '#ef4444' : '#6b7280'}; margin: 0 0 10px 0;">⚠️ Classes orphelines</h3>
+              <p style="font-size: 32px; font-weight: bold; margin: 0; color: ${otherClasses.length > 0 ? '#ef4444' : '#6b7280'};">${otherClasses.length}</p>
+            </div>
+          </div>
+          
+          ${Object.keys(questionsByTeacher).length > 1 ? `
+            <div style="margin-top: 20px; padding: 15px; background: #fef3c7; border-radius: 8px;">
+              <h4 style="margin: 0 0 10px 0;">👥 Enseignants détectés:</h4>
+              ${Object.entries(questionsByTeacher).map(([tid, qs]) => `
+                <div style="padding: 8px; background: white; margin: 5px 0; border-radius: 4px;">
+                  <code style="font-size: 12px;">${tid}</code>
+                  <span style="margin-left: 10px; font-weight: bold;">${qs.length} questions</span>
+                  ${tid === userId ? ' <span style="color: #10b981;">✓ Vous</span>' : ''}
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        `
+        
+        statsDiv.innerHTML = html
+        
+      } catch (error) {
+        statsDiv.innerHTML = `<p style="color: #ef4444;">❌ Erreur: ${error.message}</p>`
+      }
+    }
+    
+    async function fixQuestions(userId) {
+      const btn = document.getElementById('fixBtn')
+      const result = document.getElementById('fixResult')
+      
+      btn.disabled = true
+      btn.textContent = '⏳ Traitement en cours...'
+      result.innerHTML = '<p>⏳ Mise à jour des questions...</p>'
+      
+      try {
+        // Récupérer toutes les questions
+        const questionsSnap = await getDocs(collection(db, 'questions'))
+        
+        const batch = writeBatch(db)
+        let count = 0
+        
+        questionsSnap.forEach(docSnap => {
+          const data = docSnap.data()
+          if (data.teacher_id !== userId) {
+            batch.update(doc(db, 'questions', docSnap.id), { teacher_id: userId })
+            count++
+          }
+        })
+        
+        if (count > 0) {
+          await batch.commit()
+        }
+        
+        // Mettre à jour les classes aussi
+        const classesSnap = await getDocs(collection(db, 'classes'))
+        const classBatch = writeBatch(db)
+        let classCount = 0
+        
+        classesSnap.forEach(docSnap => {
+          const data = docSnap.data()
+          if (data.teacher_id !== userId) {
+            classBatch.update(doc(db, 'classes', docSnap.id), { teacher_id: userId })
+            classCount++
+          }
+        })
+        
+        if (classCount > 0) {
+          await classBatch.commit()
+        }
+        
+        result.innerHTML = `
+          <div style="background: #10b981; color: white; padding: 15px; border-radius: 4px;">
+            <p style="margin: 0;"><strong>✅ Succès !</strong></p>
+            <p style="margin: 5px 0 0 0;">${count} questions et ${classCount} classes réattribuées.</p>
+            <p style="margin: 10px 0 0 0;"><a href="https://instaquizz.vercel.app" style="color: white; text-decoration: underline;">Rechargez InstaQuizz</a></p>
+          </div>
+        `
+        
+        // Recharger les stats
+        await loadStats(userId)
+        
+      } catch (error) {
+        result.innerHTML = `
+          <div style="background: #ef4444; color: white; padding: 15px; border-radius: 4px;">
+            <p style="margin: 0;"><strong>❌ Erreur:</strong> ${error.message}</p>
+          </div>
+        `
+      } finally {
+        btn.disabled = false
+        btn.textContent = '🔄 Réattribuer mes questions'
+      }
+    }
+    
+    async function exportQuestions() {
+      const btn = document.getElementById('exportBtn')
+      const result = document.getElementById('exportResult')
+      
+      btn.disabled = true
+      btn.textContent = '⏳ Export en cours...'
+      result.innerHTML = '<p>⏳ Récupération des données...</p>'
+      
+      try {
+        // Récupérer les classes
+        const classesSnap = await getDocs(collection(db, 'classes'))
+        const classesMap = {}
+        classesSnap.forEach(doc => {
+          classesMap[doc.id] = doc.data()
+        })
+        
+        // Récupérer les questions
+        const questionsSnap = await getDocs(collection(db, 'questions'))
+        
+        let text = '═══════════════════════════════════════════════════════════\n'
+        text += '         EXPORT DES QUESTIONS - INSTAQUIZZ\n'
+        text += '═══════════════════════════════════════════════════════════\n\n'
+        text += `Date d'export: ${new Date().toLocaleString('fr-FR')}\n`
+        text += `Total de questions: ${questionsSnap.size}\n\n`
+        
+        // Grouper par classe
+        const questionsByClass = {}
+        questionsSnap.forEach(doc => {
+          const data = doc.data()
+          if (!questionsByClass[data.class_id]) {
+            questionsByClass[data.class_id] = []
+          }
+          questionsByClass[data.class_id].push({
+            id: doc.id,
+            ...data
+          })
+        })
+        
+        // Exporter
+        for (const [classId, questions] of Object.entries(questionsByClass)) {
+          const className = classesMap[classId]?.name || 'Classe sans nom'
+          text += `\n━━━ CLASSE: ${className} ━━━\n`
+          text += `Nombre de questions: ${questions.length}\n\n`
+          
+          questions.forEach((q, index) => {
+            text += `${index + 1}. ${q.content}\n`
+            if (q.image_url) {
+              text += `   📷 Image: ${q.image_alt || 'Sans description'}\n`
+            }
+            if (q.links && q.links.length > 0) {
+              q.links.forEach(link => {
+                text += `   🔗 ${link.title}: ${link.url}\n`
+              })
+            }
+            text += '\n'
+          })
+        }
+        
+        // Créer un fichier téléchargeable
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `questions-instaquizz-${new Date().toISOString().split('T')[0]}.txt`
+        a.click()
+        
+        result.innerHTML = `
+          <div style="background: #10b981; color: white; padding: 15px; border-radius: 4px;">
+            <p style="margin: 0;"><strong>✅ Export réussi !</strong></p>
+            <p style="margin: 5px 0 0 0;">${questionsSnap.size} questions exportées.</p>
+          </div>
+        `
+        
+      } catch (error) {
+        result.innerHTML = `
+          <div style="background: #ef4444; color: white; padding: 15px; border-radius: 4px;">
+            <p style="margin: 0;"><strong>❌ Erreur:</strong> ${error.message}</p>
+          </div>
+        `
+      } finally {
+        btn.disabled = false
+        btn.textContent = '💾 Exporter en TXT'
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    #output {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <h1>🔧 Outil de gestion Firebase - InstaQuizz</h1>
+  <div id="output">
+    <p style="text-align: center;">⏳ Chargement...</p>
+  </div>
+</body>
+</html>
+
