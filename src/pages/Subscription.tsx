@@ -40,7 +40,7 @@ export function Subscription() {
   }
 
   const loadUsageStats = async () => {
-    if (!user?.id) return
+    if (!user?.uid) return
     
     setStatsLoading(true)
     try {

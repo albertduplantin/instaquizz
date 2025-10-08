@@ -286,7 +286,8 @@ export function Classes({ onPageChange }: ClassesProps) {
       for (const name of uniqueNames) {
         await studentService.create({
           name,
-          class_id: selectedClass.id!
+          class_id: selectedClass.id!,
+          created_at: new Date()
         })
       }
 

@@ -57,8 +57,8 @@ export function ImageUpload({
 
       
       // Vérifier les limites de stockage
-      const userLimits = await limitsService.getUserLimits(user.id)
-      const storageCheck = await storageService.canAddFile(user.id, compressedFile.size, userLimits.maxStorageGB)
+      const userLimits = await limitsService.getUserLimits(user.uid)
+      const storageCheck = await storageService.canAddFile(user.uid, compressedFile.size, userLimits.maxStorageGB)
       
       if (!storageCheck.allowed) {
         if (onStorageLimitReached) {

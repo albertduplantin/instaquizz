@@ -250,7 +250,7 @@ export function Questions() {
   const handleImportQuestions = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!selectedClass || !importQuestionsText.trim() || !user?.id) {
+    if (!selectedClass || !importQuestionsText.trim() || !user?.uid) {
       return
     }
 

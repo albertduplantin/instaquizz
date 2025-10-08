@@ -25,7 +25,7 @@ export function SubscriptionManagement({ onPageChange }: SubscriptionManagementP
   }, [user])
 
   const loadSubscription = async () => {
-    if (!user?.id) return
+    if (!user?.uid) return
     try {
       const limits = await limitsService.getUserLimits(user.uid)
       setSubscription(limits)
@@ -42,7 +42,7 @@ export function SubscriptionManagement({ onPageChange }: SubscriptionManagementP
   }
 
   const handleDowngrade = async (targetPlan: string) => {
-    if (!user?.id) return
+    if (!user?.uid) return
     
     try {
       setLoading(true)

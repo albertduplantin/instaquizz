@@ -1,4 +1,4 @@
-import { classService, studentService, questionService } from './supabaseServices'
+import { classService, studentService, questionService } from './firebaseServices'
 import { storageService } from './storageService'
 import { SUBSCRIPTION_PLANS } from './subscriptionService'
 

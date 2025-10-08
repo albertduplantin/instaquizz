@@ -208,7 +208,7 @@ export function Dashboard({ onPageChange }: DashboardProps) {
           Tableau de bord
         </h1>
         <div className="text-sm text-gray-600">
-          Bienvenue, {user?.user_metadata?.display_name || user?.email} !
+          Bienvenue, {user?.displayName || user?.email} !
         </div>
       </div>
 
