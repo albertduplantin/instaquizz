@@ -45,8 +45,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
     id: 'basic',
     name: 'Basique',
     price: 0.20, // Prix final
-    priceId: 'price_1S5sZ7RroRfv8dBg9zAOZwmm',  // À mettre à jour sur Stripe
-    priceIdAnnual: 'price_1S5sZ8RroRfv8dBgp3w5cQhw',  // À mettre à jour sur Stripe
+    priceId: 'price_1SGeQrRroRfv8dBg1ygCUmL1',
+    priceIdAnnual: 'price_1SGeQrRroRfv8dBgs5TZqN9w',
     description: 'Idéal pour les enseignants individuels',
     annualDiscount: 20,
     annualPrice: 1.92, // 0.20 * 12 * 0.8 = 1.92€
@@ -69,8 +69,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
     id: 'pro',
     name: 'Pro',
     price: 0.90, // Prix final
-    priceId: 'price_1S5sZ8RroRfv8dBgjGxiAmwq',  // À mettre à jour sur Stripe
-    priceIdAnnual: 'price_1S5sZ8RroRfv8dBgyPQWY2xi',  // À mettre à jour sur Stripe
+    priceId: 'price_1SGeQrRroRfv8dBglET5CtW6',
+    priceIdAnnual: 'price_1SGeQsRroRfv8dBgTiPCLxrz',
     description: 'Pour les enseignants expérimentés',
     popular: true,
     annualDiscount: 20,
@@ -96,8 +96,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
     id: 'premium',
     name: 'Premium',
     price: 1.99, // Prix final
-    priceId: 'price_1S5sZ8RroRfv8dBgpOx5phnQ',  // À mettre à jour sur Stripe
-    priceIdAnnual: 'price_1S5sZ9RroRfv8dBgZ1nDqp8h',  // À mettre à jour sur Stripe
+    priceId: 'price_1SGeQsRroRfv8dBgaDbnlFP1',
+    priceIdAnnual: 'price_1SGeQsRroRfv8dBgDxEmu7Ht',
     description: 'Pour les enseignants actifs',
     annualDiscount: 20,
     annualPrice: 19.10, // 1.99 * 12 * 0.8 = 19.10€
@@ -123,8 +123,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlan, SubscriptionPlanDetail
     id: 'enterprise',
     name: 'Entreprise',
     price: 0.05, // 5 centimes pour les tests
-    priceId: 'price_1S5sZ9RroRfv8dBg1sPN644j',  // 0.05€
-    priceIdAnnual: 'price_1S5sZ9RroRfv8dBgotCjR1xe',  // 0.50€
+    priceId: 'price_1SGeQsRroRfv8dBgqKLN1Z01',
+    priceIdAnnual: 'price_1SGeQtRroRfv8dBgSjhiSvtq',
     description: 'Pour les établissements',
     annualDiscount: 20,
     annualPrice: 0.50, // 50 centimes pour les tests annuels

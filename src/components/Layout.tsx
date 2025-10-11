@@ -41,7 +41,6 @@ export function Layout({ children, currentPage, onPageChange }: LayoutProps) {
     { id: 'subscription', label: 'Abonnement', icon: CreditCard },
     { id: 'help', label: 'Centre d\'aide', icon: BookOpen },
     { id: 'support', label: 'Support', icon: MessageCircle },
-    { id: 'admin-tools', label: 'Outils Admin', icon: Wrench },
     ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Crown }] : []),
   ]
 

@@ -17,23 +17,23 @@ const getStripe = () => {
 // Configuration des produits Stripe
 export const STRIPE_PRODUCTS = {
   basic: {
-    priceId: 'price_1S5oyDRroRfv8dBgV4xkdCLT',
-    priceIdAnnual: 'price_1S5qN2RroRfv8dBg7g7RpSCY',
-    productId: 'prod_T1sjiflOi8mLnd'
+    priceId: 'price_1SGeQrRroRfv8dBg1ygCUmL1', // 0.20€/mois
+    priceIdAnnual: 'price_1SGeQrRroRfv8dBgs5TZqN9w', // 1.92€/an
+    productId: 'prod_T1sjifIOi8mLnd'
   },
   pro: {
-    priceId: 'price_1S5qL0RroRfv8dBgmobKdJIs',
-    priceIdAnnual: 'price_1S5qL0RroRfv8dBg1gaBJJdY',
-    productId: 'prod_pro'
+    priceId: 'price_1SGeQrRroRfv8dBglET5CtW6', // 0.90€/mois
+    priceIdAnnual: 'price_1SGeQsRroRfv8dBgTiPCLxrz', // 8.64€/an
+    productId: 'prod_T1u9j3MoSyab5B'
   },
   premium: {
-    priceId: 'price_1S5oysRroRfv8dBgCUlnpNKc',
-    priceIdAnnual: 'price_1S5q0TRroRfv8dBgsWAP4QFV',
+    priceId: 'price_1SGeQsRroRfv8dBgaDbnlFP1', // 1.99€/mois
+    priceIdAnnual: 'price_1SGeQsRroRfv8dBgDxEmu7Ht', // 19.10€/an
     productId: 'prod_T1skztwqLP8S9G'
   },
   enterprise: {
-    priceId: 'price_1S5ozkRroRfv8dBghnJ3NHi5',
-    priceIdAnnual: 'price_1S5qPLRroRfv8dBgEuEMLpS0',
+    priceId: 'price_1SGeQsRroRfv8dBgqKLN1Z01', // 0.05€/mois
+    priceIdAnnual: 'price_1SGeQtRroRfv8dBgSjhiSvtq', // 0.50€/an
     productId: 'prod_T1slnvww4xL4xp'
   }
 }

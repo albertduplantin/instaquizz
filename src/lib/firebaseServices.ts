@@ -12,7 +12,8 @@ import {
   ref, 
   uploadBytes, 
   getDownloadURL, 
-  deleteObject 
+  deleteObject,
+  getMetadata 
 } from 'firebase/storage'
 import { db, storage } from './firebase'
 
@@ -190,5 +191,31 @@ export const imageService = {
   async deleteImage(path: string) {
     const imageRef = ref(storage, path)
     await deleteObject(imageRef)
+  },
+
+  async getImageSize(path: string): Promise<number> {
+    try {
+      const imageRef = ref(storage, path)
+      const metadata = await getMetadata(imageRef)
+      return metadata.size // Retourne la taille en bytes
+    } catch (error) {
+      console.warn('Impossible de récupérer les métadonnées de l\'image:', error)
+      return 0
+    }
+  },
+
+  // Extraire le chemin d'une URL Firebase Storage
+  extractPathFromUrl(url: string): string | null {
+    try {
+      // Format: https://firebasestorage.googleapis.com/v0/b/bucket/o/path%2Fto%2Ffile?token=...
+      const match = url.match(/\/o\/(.+?)\?/)
+      if (match) {
+        return decodeURIComponent(match[1])
+      }
+      return null
+    } catch (error) {
+      console.warn('Impossible d\'extraire le chemin de l\'URL:', error)
+      return null
+    }
   }
 }

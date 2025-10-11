@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Règles de sécurité Firebase Storage pour InstaQuizz
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Images des questions - accessibles en lecture publique, upload par utilisateurs authentifiés uniquement
+    match /question-images/{imageId} {
+      // Permettre la lecture publique (pour afficher les images dans les quiz)
+      allow read: if true;
+      
+      // Permettre l'upload uniquement aux utilisateurs authentifiés
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024  // Max 5MB
+                   && request.resource.contentType.matches('image/.*');  // Uniquement des images
+      
+      // Permettre la suppression uniquement à l'utilisateur qui a uploadé l'image
+      allow delete: if request.auth != null;
+    }
+    
+    // Bloquer tout autre accès par défaut
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

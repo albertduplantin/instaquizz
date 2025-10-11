@@ -1,0 +1,11 @@
+{
+  "name": "instaquizz-api",
+  "version": "1.0.0",
+  "description": "API Serverless Functions pour InstaQuizz",
+  "type": "module",
+  "dependencies": {
+    "stripe": "^14.10.0",
+    "firebase-admin": "^12.0.0"
+  }
+}
+

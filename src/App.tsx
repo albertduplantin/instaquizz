@@ -10,7 +10,6 @@ import { SubscriptionManagement } from './pages/SubscriptionManagement'
 import { AdminDashboard } from './pages/AdminDashboard'
 import { Support } from './pages/Support'
 import { HelpCenter } from './pages/HelpCenter'
-import { AdminTools } from './pages/AdminTools'
 import { useFirebaseAuth } from './hooks/useFirebaseAuth' // CHANGEMENT: Utiliser Firebase
 import { useUserProfile } from './hooks/useUserProfile'
 import { useNavigation } from './hooks/useNavigation'
@@ -63,8 +62,6 @@ function AppContent() {
         return <HelpCenter onPageChange={navigateTo} />
       case 'admin':
         return <AdminDashboard />
-      case 'admin-tools':
-        return <AdminTools />
       default:
         return <Dashboard onPageChange={navigateTo} />
     }

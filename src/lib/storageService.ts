@@ -2,37 +2,41 @@ export const storageService = {
   // Calculer la taille réelle du stockage utilisé par un utilisateur
   async calculateUserStorage(userId: string): Promise<number> {
     try {
+      console.log('🔍 Calcul du stockage pour l\'utilisateur:', userId)
+      
       // Récupérer toutes les questions de l'utilisateur pour trouver les images
       const { questionService } = await import('./firebaseServices')
       const { classService } = await import('./firebaseServices')
       
       const classes = await classService.getByTeacher(userId)
+      console.log(`📚 ${classes.length} classes trouvées`)
       
-      let totalSizeBytes = 0
+      let totalSizeGB = 0
       let imagesFound = 0
       
       for (const classItem of classes) {
         const questions = await questionService.getByClass(classItem.id!)
+        console.log(`❓ ${questions.length} questions dans la classe "${classItem.name}"`)
         
         for (const question of questions) {
           if (question.image_url) {
-            const imageSize = await this.calculateImageSize(question.image_url)
-            totalSizeBytes += imageSize * (1024 * 1024 * 1024) // Convertir GB en bytes
+            const imageSizeGB = await this.calculateImageSize(question.image_url)
+            totalSizeGB += imageSizeGB
             imagesFound++
           }
         }
       }
       
-      // Convertir en GB
-      const totalSizeGB = totalSizeBytes / (1024 * 1024 * 1024)
+      const totalSizeMB = totalSizeGB * 1024
+      console.log(`📊 Résultat final: ${imagesFound} images, ${totalSizeMB.toFixed(2)}MB (${totalSizeGB.toFixed(4)}GB)`)
       
       return totalSizeGB
     } catch (error: any) {
-      console.error('Erreur lors du calcul du stockage:', error)
+      console.error('❌ Erreur lors du calcul du stockage:', error)
       
       // Gestion spécifique des erreurs de permissions
       if (error.code === 'permission-denied') {
-        console.warn('Permissions insuffisantes pour calculer le stockage. Vérifiez les règles Firestore.')
+        console.warn('⚠️ Permissions insuffisantes pour calculer le stockage. Vérifiez les règles Firestore.')
         return 0
       }
       
@@ -43,28 +47,42 @@ export const storageService = {
   // Calculer la taille d'une image spécifique
   async calculateImageSize(imageUrl: string): Promise<number> {
     try {
-      // Si c'est une URL Supabase Storage, extraire le chemin
-      if (imageUrl.includes('supabase')) {
-        // Pour Supabase, on peut estimer la taille ou faire une requête HEAD
-        const response = await fetch(imageUrl, { method: 'HEAD' })
-        const contentLength = response.headers.get('content-length')
-        if (contentLength) {
-          const sizeGB = parseInt(contentLength) / (1024 * 1024 * 1024)
+      console.log('📊 Calcul de la taille pour:', imageUrl)
+      
+      // Pour Firebase Storage, utiliser l'API Firebase pour éviter les problèmes CORS
+      if (imageUrl.includes('firebasestorage.googleapis.com')) {
+        const { imageService } = await import('./firebaseServices')
+        const path = imageService.extractPathFromUrl(imageUrl)
+        
+        console.log('📂 Chemin extrait:', path)
+        
+        if (path) {
+          const sizeBytes = await imageService.getImageSize(path)
+          const sizeGB = sizeBytes / (1024 * 1024 * 1024)
+          const sizeMB = sizeBytes / (1024 * 1024)
+          
+          console.log(`✅ Taille récupérée: ${sizeMB.toFixed(2)}MB (${sizeGB.toFixed(6)}GB)`)
           return sizeGB
+        } else {
+          console.warn('⚠️ Impossible d\'extraire le chemin de l\'URL')
         }
       }
       
-      // Pour les autres URLs, faire une requête HEAD pour obtenir la taille
-      const response = await fetch(imageUrl, { method: 'HEAD' })
-      const contentLength = response.headers.get('content-length')
-      if (contentLength) {
-        const sizeGB = parseInt(contentLength) / (1024 * 1024 * 1024)
-        return sizeGB
+      // Pour Supabase Storage ou autres, estimer une taille moyenne
+      // (on évite fetch qui cause des erreurs CORS)
+      if (imageUrl.includes('supabase')) {
+        console.log('📦 Supabase Storage détecté, estimation 500KB')
+        // Estimation : ~500KB après compression
+        return 0.0005 // 0.5MB en GB
       }
-      return 0
+      
+      // Par défaut, estimer ~500KB
+      console.log('⚠️ Source inconnue, estimation 500KB')
+      return 0.0005
     } catch (error) {
-      console.warn('Impossible de calculer la taille de l\'image:', error)
-      return 0
+      console.error('❌ Erreur lors du calcul de la taille de l\'image:', error)
+      // En cas d'erreur, estimer ~500KB
+      return 0.0005
     }
   },
 
